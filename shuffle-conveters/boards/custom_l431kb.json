@@ -1,29 +1,26 @@
 {
-    "build": {
-      "cpu": "cortex-m4",
-      "extra_flags": "-DSTM32L431xx",
-      "f_cpu": "80000000L",
-      "mcu": "stm32l431kbu3"
-    },
-    "debug": {
-      "default_tools": [
-        "blackmagic"
-      ],
-      "openocd_target": "stm32l4x",
-      "svd_path": "STM32L4x1.svd"
-    },
-    "frameworks": [
-      "stm32cube"
-    ],
-    "name": "Custom L431KB",
-    "upload": {
-      "maximum_ram_size": 65536,
-      "maximum_size": 262144,
-      "protocol": "blackmagic",
-      "protocols": [
-        "blackmagic"
-      ]
-    },
-    "url": "https://developer.mbed.org/platforms/ST-Nucleo-L432KC/",
-    "vendor": "ST"
-  }
+  "build": {
+    "core": "stm32",
+    "cpu": "cortex-m4",
+    "extra_flags": "-DSTM32L431xx",
+    "f_cpu": "16000000L",
+    "mcu": "stm32l431kbu3",
+    "variant": "stm32l4"
+  },
+  "debug": {
+    "jlink_device": "STM32L431KB",
+    "openocd_target": "stm32l4x",
+    "svd_path": "STM32L4x1.svd"
+  },
+  "frameworks": [
+    "stm32cube"
+  ],
+  "name": "Custom L431KB",
+  "upload": {
+    "maximum_ram_size": 65536,
+    "maximum_size": 262144,
+    "protocol": "custom"
+  },
+  "url": "https://docs.platformio.org/en/latest/platforms/creating_board.html",
+  "vendor": "ST"
+}

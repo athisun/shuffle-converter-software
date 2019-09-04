@@ -106,7 +106,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-    HAL_Delay(100);
+    HAL_Delay(1000);
 
     /* USER CODE BEGIN 3 */
   }
@@ -188,6 +188,9 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
+
+  // TODO: blink led fast?
+  // or transmit can error message (if can is init? this function can be called from many places)
 
   /* USER CODE END Error_Handler_Debug */
 }
