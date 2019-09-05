@@ -142,6 +142,25 @@ int main(void)
   timer_configure_pwm(&htim1, TIM_CHANNEL_1, 10000, duty, TIM_OCMODE_PWM1);
   timer_configure_pwm(&htim1, TIM_CHANNEL_2, 10000, 1.0-duty, TIM_OCMODE_PWM2);
 
+
+  // adc example, read channnel 10 (adc1 on schematic)
+  ADC_ChannelConfTypeDef sConfig = {0};
+  sConfig.Channel = ADC_CHANNEL_10;
+  sConfig.Rank = ADC_REGULAR_RANK_1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
+  sConfig.SingleDiff = ADC_SINGLE_ENDED;
+  sConfig.OffsetNumber = ADC_OFFSET_NONE;
+  sConfig.Offset = 0;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  HAL_ADC_Start(&hadc1);
+  volatile HAL_StatusTypeDef result = HAL_ADC_PollForConversion(&hadc1, 1000);
+  volatile uint32_t adc = HAL_ADC_GetValue(&hadc1);
+  HAL_ADC_Stop(&hadc1);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
