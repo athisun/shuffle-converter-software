@@ -60,6 +60,44 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+void timer_configure_pwm(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t fpwm, float duty) {
+  uint32_t ftim = HAL_RCC_GetSysClockFreq();
+
+  uint32_t psc = 0;
+
+  uint32_t arr = (ftim/(psc+1))/fpwm;
+
+  while(arr > 0xFFFF) {
+    psc++;
+    arr = (ftim/(psc+1))/fpwm;
+  }
+
+  uint32_t ccrx = ((duty / 100.0) * (arr+1)) - 1;
+
+  volatile float res = 1.0*ftim/fpwm;
+  
+  // stop generation of pwm
+  volatile HAL_StatusTypeDef out;
+  out = HAL_TIM_PWM_Stop(htim, Channel);
+  TIM_OC_InitTypeDef sConfigOC = {0};
+  // set the period duration
+  htim->Init.Prescaler = psc;
+  htim->Init.Period = arr;
+  // reinititialise with new period value
+  out = HAL_TIM_PWM_Init(htim);
+  // set the pulse duration
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = ccrx;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
+  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  out = HAL_TIM_PWM_ConfigChannel(htim, &sConfigOC, Channel);
+  // start pwm generation
+  out = HAL_TIM_PWM_Start(htim, Channel);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -97,6 +135,9 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
+  // start timer 1 channel 1
+  timer_configure_pwm(&htim1, TIM_CHANNEL_1, 10000, 1);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -104,7 +145,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-    Error_Handler();
+    
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -126,8 +167,11 @@ void SystemClock_Config(void)
   __HAL_RCC_LSEDRIVE_CONFIG(RCC_LSEDRIVE_LOW);
   /** Initializes the CPU, AHB and APB busses clocks 
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_LSE|RCC_OSCILLATORTYPE_MSI;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI|RCC_OSCILLATORTYPE_LSE
+                              |RCC_OSCILLATORTYPE_MSI;
   RCC_OscInitStruct.LSEState = RCC_LSE_ON;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.MSIState = RCC_MSI_ON;
   RCC_OscInitStruct.MSICalibrationValue = 0;
   RCC_OscInitStruct.MSIClockRange = RCC_MSIRANGE_6;
@@ -140,7 +184,7 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_MSI;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
