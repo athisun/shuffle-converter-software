@@ -60,7 +60,9 @@ void SystemClock_Config(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-void timer_configure_pwm(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t fpwm, float duty) {
+// duty cycle is in percent, 0.0 - 1.0
+
+void timer_configure_pwm(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t fpwm, float duty, uint32_t mode) {
   uint32_t ftim = HAL_RCC_GetSysClockFreq();
 
   uint32_t psc = 0;
@@ -72,7 +74,7 @@ void timer_configure_pwm(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t fpw
     arr = (ftim/(psc+1))/fpwm;
   }
 
-  uint32_t ccrx = ((duty / 100.0) * (arr+1)) - 1;
+  uint32_t ccrx = (duty * (arr+1)) - 1;
 
   volatile float res = 1.0*ftim/fpwm;
   
@@ -86,7 +88,7 @@ void timer_configure_pwm(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t fpw
   // reinititialise with new period value
   out = HAL_TIM_PWM_Init(htim);
   // set the pulse duration
-  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.OCMode = mode;
   sConfigOC.Pulse = ccrx;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
@@ -136,7 +138,9 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   // start timer 1 channel 1
-  timer_configure_pwm(&htim1, TIM_CHANNEL_1, 10000, 1);
+  float duty = 0.02;
+  timer_configure_pwm(&htim1, TIM_CHANNEL_1, 10000, duty, TIM_OCMODE_PWM1);
+  timer_configure_pwm(&htim1, TIM_CHANNEL_2, 10000, 1.0-duty, TIM_OCMODE_PWM2);
 
   /* USER CODE END 2 */
 
