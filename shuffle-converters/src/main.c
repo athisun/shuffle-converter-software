@@ -28,6 +28,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include <math.h>
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -62,11 +64,13 @@ void SystemClock_Config(void);
 
 // duty cycle is in percent, 0.0 - 1.0
 
-void timer_configure_pwm(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t fpwm, float duty, uint32_t mode) {
+
+void timer_configure_pwm(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t fpwm, double duty, uint32_t mode) {
+
+  // formulas from http://www.emcu.eu/wp-content/uploads/2016/11/en.STM32L4_WDG_TIMERS_GPTIM.pdf
+
   uint32_t ftim = HAL_RCC_GetSysClockFreq();
-
   uint32_t psc = 0;
-
   uint32_t arr = (ftim/(psc+1))/fpwm;
 
   while(arr > 0xFFFF) {
@@ -76,7 +80,7 @@ void timer_configure_pwm(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t fpw
 
   uint32_t ccrx = (duty * (arr+1)) - 1;
 
-  volatile float res = 1.0*ftim/fpwm;
+  volatile double res = 1.0*ftim/fpwm;
   
   // stop generation of pwm
   volatile HAL_StatusTypeDef out;
@@ -98,6 +102,21 @@ void timer_configure_pwm(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t fpw
   out = HAL_TIM_PWM_ConfigChannel(htim, &sConfigOC, Channel);
   // start pwm generation
   out = HAL_TIM_PWM_Start(htim, Channel);
+}
+
+void timers_set(uint32_t pwm_frequency, uint32_t pulse_width_us, TIM_HandleTypeDef *htim, uint32_t channel_bottom, uint32_t channel_top, uint32_t direction) {
+
+  volatile double period = 1.0 / pwm_frequency;
+  volatile double pulse_width = pulse_width_us * pow(10, -6);
+  double duty = (double)((int)((pulse_width/period) * 100 + 0.5) / 100.0);
+
+  if (duty <= 0 || duty >= 1) {
+    return;
+  }
+
+  // start timer 1 channel 1
+  timer_configure_pwm(htim, (direction == 1 ? channel_top : channel_bottom), pwm_frequency, duty, (duty < 50 ? TIM_OCMODE_PWM1 : TIM_OCMODE_PWM2));
+  timer_configure_pwm(htim, (direction == 1 ? channel_bottom : channel_top), pwm_frequency, 1.0-duty, (duty < 50 ? TIM_OCMODE_PWM2 : TIM_OCMODE_PWM1));
 }
 
 /* USER CODE END 0 */
@@ -137,13 +156,22 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
 
-  // start timer 1 channel 1
-  float duty = 0.02;
-  timer_configure_pwm(&htim1, TIM_CHANNEL_1, 10000, duty, TIM_OCMODE_PWM1);
-  timer_configure_pwm(&htim1, TIM_CHANNEL_2, 10000, 1.0-duty, TIM_OCMODE_PWM2);
+  // disable switchers
+  // HAL_GPIO_WritePin(DIS1_GPIO_Port, DIS1_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(DIS2_GPIO_Port, DIS2_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(DIS3_GPIO_Port, DIS3_Pin, GPIO_PIN_SET);
 
+  // set timers up
+  // 50khz pwm freq
+  // 2us pulse time
+  // which timer
+  // bottom channel
+  // top channel
+  // direction (0 = bottom to top, 1 = top to bottom)
+  timers_set(50000, 2, &htim1, TIM_CHANNEL_1, TIM_CHANNEL_2, 0);
 
   // adc example, read channnel 10 (adc1 on schematic)
+  /*
   ADC_ChannelConfTypeDef sConfig = {0};
   sConfig.Channel = ADC_CHANNEL_10;
   sConfig.Rank = ADC_REGULAR_RANK_1;
@@ -160,6 +188,7 @@ int main(void)
   volatile HAL_StatusTypeDef result = HAL_ADC_PollForConversion(&hadc1, 1000);
   volatile uint32_t adc = HAL_ADC_GetValue(&hadc1);
   HAL_ADC_Stop(&hadc1);
+  */
 
   /* USER CODE END 2 */
 
