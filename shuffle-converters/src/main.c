@@ -84,7 +84,7 @@ void timer_configure_pwm(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t fpw
   uint32_t ccrx = (duty * (arr+1)) - 1;
 
   volatile double res = 1.0*ftim/fpwm;
-  
+
   // stop generation of pwm
   volatile HAL_StatusTypeDef out;
   out = HAL_TIM_PWM_Stop(htim, Channel);
@@ -133,7 +133,7 @@ int main(void)
   /* USER CODE BEGIN 1 */
 
   /* USER CODE END 1 */
-  
+
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -201,7 +201,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-    
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -255,7 +255,7 @@ void Error_Handler(void)
   * @retval None
   */
 void assert_failed(char *file, uint32_t line)
-{ 
+{
   /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line number,
      tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */

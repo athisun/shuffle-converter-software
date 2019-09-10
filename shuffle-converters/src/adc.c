@@ -31,7 +31,7 @@ void MX_ADC1_Init(void)
 {
   ADC_ChannelConfTypeDef sConfig = {0};
 
-  /** Common config 
+  /** Common config
   */
   hadc1.Instance = ADC1;
   hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
@@ -52,7 +52,7 @@ void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
-  /** Configure Regular Channel 
+  /** Configure Regular Channel
   */
   sConfig.Channel = ADC_CHANNEL_16;
   sConfig.Rank = ADC_REGULAR_RANK_1;
@@ -78,15 +78,15 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef* adcHandle)
   /* USER CODE END ADC1_MspInit 0 */
     /* ADC1 clock enable */
     __HAL_RCC_ADC_CLK_ENABLE();
-  
+
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
-    /**ADC1 GPIO Configuration    
+    /**ADC1 GPIO Configuration
     PA5     ------> ADC1_IN10
     PA6     ------> ADC1_IN11
     PA7     ------> ADC1_IN12
     PB0     ------> ADC1_IN15
-    PB1     ------> ADC1_IN16 
+    PB1     ------> ADC1_IN16
     */
     GPIO_InitStruct.Pin = ADC1_Pin|ADC2_Pin|ADC3_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_ANALOG_ADC_CONTROL;
@@ -114,13 +114,13 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* adcHandle)
   /* USER CODE END ADC1_MspDeInit 0 */
     /* Peripheral clock disable */
     __HAL_RCC_ADC_CLK_DISABLE();
-  
-    /**ADC1 GPIO Configuration    
+
+    /**ADC1 GPIO Configuration
     PA5     ------> ADC1_IN10
     PA6     ------> ADC1_IN11
     PA7     ------> ADC1_IN12
     PB0     ------> ADC1_IN15
-    PB1     ------> ADC1_IN16 
+    PB1     ------> ADC1_IN16
     */
     HAL_GPIO_DeInit(GPIOA, ADC1_Pin|ADC2_Pin|ADC3_Pin);
 
@@ -130,7 +130,7 @@ void HAL_ADC_MspDeInit(ADC_HandleTypeDef* adcHandle)
 
   /* USER CODE END ADC1_MspDeInit 1 */
   }
-} 
+}
 
 /* USER CODE BEGIN 1 */
 

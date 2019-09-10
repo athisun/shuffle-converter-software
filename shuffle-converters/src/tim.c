@@ -254,9 +254,9 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* timHandle)
 
   /* USER CODE END TIM1_MspPostInit 0 */
     __HAL_RCC_GPIOA_CLK_ENABLE();
-    /**TIM1 GPIO Configuration    
+    /**TIM1 GPIO Configuration
     PA8     ------> TIM1_CH1
-    PA9     ------> TIM1_CH2 
+    PA9     ------> TIM1_CH2
     */
     GPIO_InitStruct.Pin = PWM2_Pin|PWM1_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
@@ -274,11 +274,11 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* timHandle)
   /* USER CODE BEGIN TIM2_MspPostInit 0 */
 
   /* USER CODE END TIM2_MspPostInit 0 */
-  
+
     __HAL_RCC_GPIOA_CLK_ENABLE();
-    /**TIM2 GPIO Configuration    
+    /**TIM2 GPIO Configuration
     PA0     ------> TIM2_CH1
-    PA1     ------> TIM2_CH2 
+    PA1     ------> TIM2_CH2
     */
     GPIO_InitStruct.Pin = PWM5_Pin|PWM6_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
@@ -296,11 +296,11 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* timHandle)
   /* USER CODE BEGIN TIM15_MspPostInit 0 */
 
   /* USER CODE END TIM15_MspPostInit 0 */
-  
+
     __HAL_RCC_GPIOA_CLK_ENABLE();
-    /**TIM15 GPIO Configuration    
+    /**TIM15 GPIO Configuration
     PA2     ------> TIM15_CH1
-    PA3     ------> TIM15_CH2 
+    PA3     ------> TIM15_CH2
     */
     GPIO_InitStruct.Pin = PWM3_Pin|PWM4_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
@@ -352,7 +352,7 @@ void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* tim_baseHandle)
 
   /* USER CODE END TIM15_MspDeInit 1 */
   }
-} 
+}
 
 /* USER CODE BEGIN 1 */
 
