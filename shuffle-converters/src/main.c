@@ -151,10 +151,37 @@ int main(void)
   /* Infinite loop */
   while (1)
   {
-    HAL_ADC_Start(&hadc1);
-    volatile HAL_StatusTypeDef result = HAL_ADC_PollForConversion(&hadc1, 1000);
-    volatile uint32_t adc = HAL_ADC_GetValue(&hadc1);
-    HAL_ADC_Stop(&hadc1);
+    // define an array where the adc values will be stored
+    volatile uint32_t adc_values[7];
+    // start the adc peripheral
+    if (HAL_ADC_Start(&hadc1) != HAL_OK) {
+      Error_Handler();
+    }
+    // read the adc peripheral a number of times for each "rank" aka channel setup
+    for (uint8_t i = 0; i < 7; i++) {
+      volatile HAL_StatusTypeDef result = HAL_ADC_PollForConversion(&hadc1, 1000);
+      if (result != HAL_OK) {
+        Error_Handler();
+      }
+      adc_values[i] = HAL_ADC_GetValue(&hadc1);
+    }
+    // stop the adc peripheral
+    if (HAL_ADC_Stop(&hadc1) != HAL_OK) {
+      Error_Handler();
+    }
+    
+    // calculate the analog refererence voltage from the vrefint channel
+    volatile uint32_t vrefa = __HAL_ADC_CALC_VREFANALOG_VOLTAGE(adc_values[6], ADC_RESOLUTION_12B);
+
+    // calculate the internal temperature sensor from the internal channel
+    volatile uint32_t temp = __HAL_ADC_CALC_TEMPERATURE(vrefa, adc_values[5], ADC_RESOLUTION_12B);
+    
+    // convert all the adc values to voltages using the analog reference voltage
+    volatile uint32_t adc_voltages[5];
+    for (uint8_t i = 0; i < 5; i++) {
+      adc_voltages[i] = __HAL_ADC_CALC_DATA_TO_VOLTAGE(vrefa, adc_values[i], ADC_RESOLUTION_12B);
+    }
+    
 
     HAL_Delay(1000);
   }
