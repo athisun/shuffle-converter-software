@@ -16,7 +16,6 @@
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
@@ -26,48 +25,30 @@
 #include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
 
 // clock setup moved from main.c
 #include "clock.h"
 
 #include <math.h>
 
-/* USER CODE END Includes */
-
 /* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
 
-/* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
 
-/* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
 
-/* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 
-/* USER CODE BEGIN PV */
-
-/* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 
-/* USER CODE BEGIN PFP */
-
-/* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
 
 // duty cycle is in percent, 0.0 - 1.0
-
-
 void timer_configure_pwm(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t fpwm, double duty, uint32_t mode) {
 
   // formulas from http://www.emcu.eu/wp-content/uploads/2016/11/en.STM32L4_WDG_TIMERS_GPTIM.pdf
@@ -122,7 +103,6 @@ void timers_set(uint32_t pwm_frequency, uint32_t pulse_width_us, TIM_HandleTypeD
   timer_configure_pwm(htim, (direction == 1 ? channel_bottom : channel_top), pwm_frequency, 1.0-duty, (duty < 50 ? TIM_OCMODE_PWM2 : TIM_OCMODE_PWM1));
 }
 
-/* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
@@ -130,26 +110,13 @@ void timers_set(uint32_t pwm_frequency, uint32_t pulse_width_us, TIM_HandleTypeD
   */
 int main(void)
 {
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
-
-
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
   /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
@@ -158,10 +125,17 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_TIM15_Init();
-  /* USER CODE BEGIN 2 */
+
+  // perform an automatic ADC calibration to improve the conversion accuracy
+  // has to be done before the adc is started
+  if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK) {
+    Error_Handler();
+  }
 
   // disable switchers
-  // HAL_GPIO_WritePin(DIS1_GPIO_Port, DIS1_Pin, GPIO_PIN_SET);
+  // ti switches are disabled when set/high (disable)
+  // the other ones are enabled high
+  HAL_GPIO_WritePin(DIS1_GPIO_Port, DIS1_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(DIS2_GPIO_Port, DIS2_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(DIS3_GPIO_Port, DIS3_Pin, GPIO_PIN_SET);
 
@@ -172,44 +146,19 @@ int main(void)
   // bottom channel
   // top channel
   // direction (0 = bottom to top, 1 = top to bottom)
-  timers_set(50000, 2, &htim1, TIM_CHANNEL_1, TIM_CHANNEL_2, 0);
-
-  // adc example, read channnel 10 (adc1 on schematic)
-  /*
-  ADC_ChannelConfTypeDef sConfig = {0};
-  sConfig.Channel = ADC_CHANNEL_10;
-  sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_2CYCLES_5;
-  sConfig.SingleDiff = ADC_SINGLE_ENDED;
-  sConfig.OffsetNumber = ADC_OFFSET_NONE;
-  sConfig.Offset = 0;
-  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  HAL_ADC_Start(&hadc1);
-  volatile HAL_StatusTypeDef result = HAL_ADC_PollForConversion(&hadc1, 1000);
-  volatile uint32_t adc = HAL_ADC_GetValue(&hadc1);
-  HAL_ADC_Stop(&hadc1);
-  */
-
-  /* USER CODE END 2 */
+  // timers_set(50000, 2, &htim1, TIM_CHANNEL_1, TIM_CHANNEL_2, 0);
 
   /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
   while (1)
   {
-    /* USER CODE END WHILE */
+    HAL_ADC_Start(&hadc1);
+    volatile HAL_StatusTypeDef result = HAL_ADC_PollForConversion(&hadc1, 1000);
+    volatile uint32_t adc = HAL_ADC_GetValue(&hadc1);
+    HAL_ADC_Stop(&hadc1);
 
-    /* USER CODE BEGIN 3 */
+    HAL_Delay(1000);
   }
-  /* USER CODE END 3 */
 }
-
-/* USER CODE BEGIN 4 */
-
-/* USER CODE END 4 */
 
 /**
   * @brief  This function is executed in case of error occurrence.
@@ -217,7 +166,6 @@ int main(void)
   */
 void Error_Handler(void)
 {
-  /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   HAL_GPIO_WritePin(LED_GPIO_Port,LED_Pin, GPIO_PIN_RESET);
   while(1){
@@ -243,7 +191,6 @@ void Error_Handler(void)
     }
     HAL_Delay(1000);
   }
-  /* USER CODE END Error_Handler_Debug */
 }
 
 #ifdef  USE_FULL_ASSERT
@@ -255,11 +202,9 @@ void Error_Handler(void)
   * @retval None
   */
 void assert_failed(char *file, uint32_t line)
-{
-  /* USER CODE BEGIN 6 */
+{ 
   /* User can add his own implementation to report the file name and line number,
      tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-  /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
 
