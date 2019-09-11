@@ -44,7 +44,7 @@ void MX_CAN1_Init(void)
   hcan1.Init.TransmitFifoPriority = DISABLE;
   if (HAL_CAN_Init(&hcan1) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error initialising can");
   }
 
 }

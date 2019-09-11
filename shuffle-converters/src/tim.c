@@ -45,23 +45,23 @@ void MX_TIM1_Init(void)
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error initialising timer1");
   }
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
   if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error setting timer1 clock source");
   }
   if (HAL_TIM_PWM_Init(&htim1) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error initialising timer 1 pwm");
   }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error setting timer1 master clock config sync");
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
   sConfigOC.Pulse = 0;
@@ -72,11 +72,11 @@ void MX_TIM1_Init(void)
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
   if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring timer1 channel1 pwm");
   }
   if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring timer1 channel2 pwm");
   }
   sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
   sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
@@ -91,7 +91,7 @@ void MX_TIM1_Init(void)
   sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
   if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring timer1 deadtime");
   }
   HAL_TIM_MspPostInit(&htim1);
 
@@ -111,22 +111,22 @@ void MX_TIM2_Init(void)
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error initialising timer2");
   }
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
   if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring timer2 clock source");
   }
   if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error initialising timer2 pwm");
   }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error setting timer2 master clock config sync");
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
   sConfigOC.Pulse = 0;
@@ -134,11 +134,11 @@ void MX_TIM2_Init(void)
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring timer2 channel1 pwm");
   }
   if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring timer2 channel2 pwm");
   }
   HAL_TIM_MspPostInit(&htim2);
 
@@ -160,22 +160,22 @@ void MX_TIM15_Init(void)
   htim15.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim15) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error initialising timer15");
   }
   sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
   if (HAL_TIM_ConfigClockSource(&htim15, &sClockSourceConfig) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring timer15 clock source");
   }
   if (HAL_TIM_PWM_Init(&htim15) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error initialsing timer15 pwm");
   }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim15, &sMasterConfig) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring timer15 master clock config sync");
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
   sConfigOC.Pulse = 0;
@@ -186,11 +186,11 @@ void MX_TIM15_Init(void)
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
   if (HAL_TIM_PWM_ConfigChannel(&htim15, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring timer15 channel1 pwm");
   }
   if (HAL_TIM_PWM_ConfigChannel(&htim15, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring timer15 channel2 pwm");
   }
   sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
   sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
@@ -201,7 +201,7 @@ void MX_TIM15_Init(void)
   sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
   if (HAL_TIMEx_ConfigBreakDeadTime(&htim15, &sBreakDeadTimeConfig) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("configuring timer15 dead time");
   }
   HAL_TIM_MspPostInit(&htim15);
 

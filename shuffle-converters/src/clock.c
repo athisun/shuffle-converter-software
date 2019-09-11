@@ -31,7 +31,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLR = RCC_PLLR_DIV4;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring rcc oscilator");
   }
   /** Initializes the CPU, AHB and APB busses clocks 
   */
@@ -44,7 +44,7 @@ void SystemClock_Config(void)
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring rcc clock");
   }
   PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
   PeriphClkInit.AdcClockSelection = RCC_ADCCLKSOURCE_PLLSAI1;
@@ -57,13 +57,13 @@ void SystemClock_Config(void)
   PeriphClkInit.PLLSAI1.PLLSAI1ClockOut = RCC_PLLSAI1_ADC1CLK;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring peripheral clock");
   }
   /** Configure the main internal regulator output voltage 
   */
   if (HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring pwr regulator voltage scale");
   }
   /** Enable MSI Auto calibration 
   */

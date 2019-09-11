@@ -30,6 +30,8 @@
 #include "clock.h"
 
 #include <math.h>
+#include <stdio.h>
+#include <stdarg.h>
 
 /* Private typedef -----------------------------------------------------------*/
 
@@ -45,6 +47,7 @@
 
 /* Private function prototypes -----------------------------------------------*/
 
+extern void initialise_monitor_handles(void);
 
 /* Private user code ---------------------------------------------------------*/
 
@@ -110,6 +113,9 @@ void timers_set(uint32_t pwm_frequency, uint32_t pulse_width_us, TIM_HandleTypeD
   */
 int main(void)
 {
+  // semihosting init
+  initialise_monitor_handles();
+  
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
@@ -129,7 +135,7 @@ int main(void)
   // perform an automatic ADC calibration to improve the conversion accuracy
   // has to be done before the adc is started
   if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK) {
-    Error_Handler();
+    Error_Handler("error calbrating adc");
   }
 
   // disable switchers
@@ -155,19 +161,19 @@ int main(void)
     volatile uint32_t adc_values[7];
     // start the adc peripheral
     if (HAL_ADC_Start(&hadc1) != HAL_OK) {
-      Error_Handler();
+      Error_Handler("error starting adc");
     }
     // read the adc peripheral a number of times for each "rank" aka channel setup
     for (uint8_t i = 0; i < 7; i++) {
       volatile HAL_StatusTypeDef result = HAL_ADC_PollForConversion(&hadc1, 1000);
       if (result != HAL_OK) {
-        Error_Handler();
+        Error_Handler("error polling for conversion %d", i);
       }
       adc_values[i] = HAL_ADC_GetValue(&hadc1);
     }
     // stop the adc peripheral
     if (HAL_ADC_Stop(&hadc1) != HAL_OK) {
-      Error_Handler();
+      Error_Handler("error stopping adc");
     }
     
     // calculate the analog refererence voltage from the vrefint channel
@@ -191,8 +197,13 @@ int main(void)
   * @brief  This function is executed in case of error occurrence.
   * @retval None
   */
-void Error_Handler(void)
+void Error_Handler(const char* format, ...)
 {
+  va_list args;
+  va_start(args, format);
+  vprintf(format, args);
+  va_end(args);
+
   /* User can add his own implementation to report the HAL error return state */
   HAL_GPIO_WritePin(LED_GPIO_Port,LED_Pin, GPIO_PIN_RESET);
   while(1){

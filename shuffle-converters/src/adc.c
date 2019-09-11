@@ -54,7 +54,7 @@ void MX_ADC1_Init(void)
   hadc1.Init.Oversampling.OversamplingStopReset = ADC_REGOVERSAMPLING_CONTINUED_MODE;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error initialising adc1");
   }
   /** Configure Regular Channel
   */
@@ -66,7 +66,7 @@ void MX_ADC1_Init(void)
   sConfig.Offset = 0;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring adc channel 10");
   }
   /** Configure Regular Channel 
   */
@@ -74,7 +74,7 @@ void MX_ADC1_Init(void)
   sConfig.Rank = ADC_REGULAR_RANK_2;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring adc channel 11");
   }
   /** Configure Regular Channel 
   */
@@ -82,7 +82,7 @@ void MX_ADC1_Init(void)
   sConfig.Rank = ADC_REGULAR_RANK_3;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring adc channel 12");
   }
   /** Configure Regular Channel 
   */
@@ -90,7 +90,7 @@ void MX_ADC1_Init(void)
   sConfig.Rank = ADC_REGULAR_RANK_4;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring adc channel 15");
   }
   /** Configure Regular Channel 
   */
@@ -98,7 +98,7 @@ void MX_ADC1_Init(void)
   sConfig.Rank = ADC_REGULAR_RANK_5;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring adc channel 16");
   }
   /** Configure Regular Channel 
   */
@@ -106,7 +106,7 @@ void MX_ADC1_Init(void)
   sConfig.Rank = ADC_REGULAR_RANK_6;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring adc channel temp sensor");
   }
   /** Configure Regular Channel 
   */
@@ -114,7 +114,7 @@ void MX_ADC1_Init(void)
   sConfig.Rank = ADC_REGULAR_RANK_7;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
-    Error_Handler();
+    Error_Handler("error configuring adc channel vrefint");
   }
 
 }
