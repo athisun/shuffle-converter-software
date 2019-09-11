@@ -51,61 +51,113 @@ extern void initialise_monitor_handles(void);
 
 /* Private user code ---------------------------------------------------------*/
 
-// duty cycle is in percent, 0.0 - 1.0
-void timer_configure_pwm(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t fpwm, double duty, uint32_t mode) {
-
-  // formulas from http://www.emcu.eu/wp-content/uploads/2016/11/en.STM32L4_WDG_TIMERS_GPTIM.pdf
-
-  uint32_t ftim = HAL_RCC_GetSysClockFreq();
-  uint32_t psc = 0;
-  uint32_t arr = (ftim/(psc+1))/fpwm;
-
-  while(arr > 0xFFFF) {
-    psc++;
-    arr = (ftim/(psc+1))/fpwm;
+// returns the timer number from the pointer based on the instance
+uint8_t get_timer_num(TIM_HandleTypeDef *htim) {
+  uint8_t timernum = 0;
+  if (htim->Instance == TIM1) {
+    timernum = 1;
+  } else if (htim->Instance == TIM2) {
+    timernum = 2;
+  } else if (htim->Instance == TIM15) {
+    timernum = 15;
   }
+  return timernum;
+}
 
-  uint32_t ccrx = (duty * (arr+1)) - 1;
-
-  volatile double res = 1.0*ftim/fpwm;
-
-  // stop generation of pwm
-  volatile HAL_StatusTypeDef out;
-  out = HAL_TIM_PWM_Stop(htim, Channel);
+// configure a timer pwm channel mode and pulse
+void pwm_configure_channel(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t mode, uint32_t pulse) {
   TIM_OC_InitTypeDef sConfigOC = {0};
-  // set the period duration
-  htim->Init.Prescaler = psc;
-  htim->Init.Period = arr;
-  // reinititialise with new period value
-  out = HAL_TIM_PWM_Init(htim);
-  // set the pulse duration
   sConfigOC.OCMode = mode;
-  sConfigOC.Pulse = ccrx;
+  sConfigOC.Pulse = pulse;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-  out = HAL_TIM_PWM_ConfigChannel(htim, &sConfigOC, Channel);
-  // start pwm generation
-  out = HAL_TIM_PWM_Start(htim, Channel);
+  if (HAL_TIM_PWM_ConfigChannel(htim, &sConfigOC, Channel) != HAL_OK) {
+    Error_Handler("error configuring timer %d channel %d pwm (mode: %ld, pulse: %ld)", get_timer_num(htim), Channel, mode, pulse);
+  }
 }
 
-void timers_set(uint32_t pwm_frequency, uint32_t pulse_width_us, TIM_HandleTypeDef *htim, uint32_t channel_bottom, uint32_t channel_top, uint32_t direction) {
+// configures a pwm timer and channels based on freq, pulse width
+// this stops, configures, then starts the pwm
+// formulas from http://www.emcu.eu/wp-content/uploads/2016/11/en.STM32L4_WDG_TIMERS_GPTIM.pdf
+void pwm_configure_timer(uint32_t pwm_frequency, uint32_t pulse_width_us, TIM_HandleTypeDef *htim, uint32_t channel_from, uint32_t channel_to) {
 
-  volatile double period = 1.0 / pwm_frequency;
-  volatile double pulse_width = pulse_width_us * pow(10, -6);
-  double duty = (double)((int)((pulse_width/period) * 100 + 0.5) / 100.0);
+  float period = 1.0 / pwm_frequency;
+  float pulse_width = pulse_width_us * pow(10, -6);
+  float duty = (float)((int)((pulse_width/period) * 100 + 0.5) / 100.0);
 
   if (duty <= 0 || duty >= 1) {
     return;
   }
 
-  // start timer 1 channel 1
-  timer_configure_pwm(htim, (direction == 1 ? channel_top : channel_bottom), pwm_frequency, duty, (duty < 50 ? TIM_OCMODE_PWM1 : TIM_OCMODE_PWM2));
-  timer_configure_pwm(htim, (direction == 1 ? channel_bottom : channel_top), pwm_frequency, 1.0-duty, (duty < 50 ? TIM_OCMODE_PWM2 : TIM_OCMODE_PWM1));
-}
+  uint8_t timernum = get_timer_num(htim);
 
+  // stop the timers before making changes to pwm
+  if (HAL_TIM_PWM_Stop(htim, channel_from) != HAL_OK) {
+    Error_Handler("error stopping from timer %d channel %d", timernum, channel_from);
+  }
+  if (HAL_TIM_PWM_Stop(htim, channel_to) != HAL_OK) {
+    Error_Handler("error stopping to timer %d channel %d", timernum, channel_to);
+  }
+
+  // get the frequency of the right timer clock based on the timer number
+  // TODO: is there a nicer way to do this?
+  uint32_t ftim = 0;
+  switch(timernum) {
+    case 1:
+    case 15:
+      ftim = HAL_RCC_GetPCLK1Freq();
+      break;
+    case 2:
+      ftim = HAL_RCC_GetPCLK2Freq();
+      break;
+    default:
+      Error_Handler("unkown timer");
+      break;
+  }
+
+  // the PWM resolution gives the number of possible duty cycle values and indicates how fine the control on the PWM signal will be
+  // The resolution, expressed in number of duty cycle steps, is simply equal to the ratio between the timer clock frequency 
+  // and the PWM frequency, the whole minus 1. 
+  // TODO: error if the resolution is too low? whats too low?
+  // float res = 1.0*ftim/pwm_frequency;
+
+  // start with a prescaler value of 0
+  uint32_t psc = 0;
+  // calculate the autoreload register
+  uint32_t arr = (ftim/(psc+1))/pwm_frequency;
+
+  // assume 16 bit timer, adjust prescaler until arr is within 16 bit
+  // could probably adjust this for the 32 bit timer but keep it consistent
+  while(arr > 0xFFFF) {
+    psc++;
+    arr = (ftim/(psc+1))/pwm_frequency;
+  }
+
+  // reinititialise timer with new prescaler and period value
+  htim->Init.Prescaler = psc;
+  htim->Init.Period = arr;
+  if (HAL_TIM_PWM_Init(htim) != HAL_OK) {
+    Error_Handler("error initialising timer %d pwm (psc: %ld, arr: %ld)", timernum, psc, arr);
+  }
+
+  // calculate counter reload register value (pulse count)
+  uint32_t ccrx = (duty * (arr+1)) - 1;
+
+  // configure each timer pwm mode and pulse
+  pwm_configure_channel(htim, channel_from, (duty < 50 ? TIM_OCMODE_PWM1 : TIM_OCMODE_PWM2), ccrx);
+  pwm_configure_channel(htim, channel_to, (duty < 50 ? TIM_OCMODE_PWM2 : TIM_OCMODE_PWM1), arr-ccrx);
+
+  // start pwm timers
+  if (HAL_TIM_PWM_Start(htim, channel_from) != HAL_OK) {
+    Error_Handler("error starting from timer %d channel %d", timernum, channel_from);
+  }
+  if (HAL_TIM_PWM_Start(htim, channel_to) != HAL_OK) {
+    Error_Handler("error starting to timer %d channel %d", timernum, channel_to);
+  }
+}
 
 /**
   * @brief  The application entry point.
@@ -145,14 +197,13 @@ int main(void)
   HAL_GPIO_WritePin(DIS2_GPIO_Port, DIS2_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(DIS3_GPIO_Port, DIS3_Pin, GPIO_PIN_SET);
 
-  // set timers up
+  // how to set a timer up
   // 50khz pwm freq
   // 2us pulse time
   // which timer
-  // bottom channel
-  // top channel
-  // direction (0 = bottom to top, 1 = top to bottom)
-  // timers_set(50000, 2, &htim1, TIM_CHANNEL_1, TIM_CHANNEL_2, 0);
+  // from channel
+  // to channel
+  // pwm_configure_timer(50000, 2, &htim1, TIM_CHANNEL_1, TIM_CHANNEL_2);
 
   /* Infinite loop */
   while (1)
@@ -208,6 +259,8 @@ int main(void)
   */
 void Error_Handler(const char* format, ...)
 {
+  // TODO: this should disable all the gate drivers, in an attempt to set to a "safe" state
+
   va_list args;
   va_start(args, format);
   vprintf(format, args);
@@ -251,8 +304,8 @@ void Error_Handler(const char* format, ...)
   */
 void assert_failed(char *file, uint32_t line)
 { 
-  /* User can add his own implementation to report the file name and line number,
-     tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  /* User can add his own implementation to report the file name and line number, */
+  printf("Wrong parameters value: file %s on line %d\r\n", file, line)
 }
 #endif /* USE_FULL_ASSERT */
 
