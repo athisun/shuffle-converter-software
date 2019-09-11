@@ -203,6 +203,7 @@ void Error_Handler(const char* format, ...)
   va_start(args, format);
   vprintf(format, args);
   va_end(args);
+  printf("\n");
 
   /* User can add his own implementation to report the HAL error return state */
   HAL_GPIO_WritePin(LED_GPIO_Port,LED_Pin, GPIO_PIN_RESET);
