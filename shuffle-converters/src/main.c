@@ -187,6 +187,15 @@ int main(void)
     for (uint8_t i = 0; i < 5; i++) {
       adc_voltages[i] = __HAL_ADC_CALC_DATA_TO_VOLTAGE(vrefa, adc_values[i], ADC_RESOLUTION_12B);
     }
+
+    printf("adc reference voltage: %ld\n", vrefa);
+    printf("internal temp: %ld\n", temp);
+    
+    for (uint8_t i = 0; i < 4; i++) {
+      printf("VCC%d = %ld mV\n", 4-i+1, adc_voltages[i]);
+    }
+
+    printf("Current sense = %ld mV\n", adc_voltages[4]);
     
 
     HAL_Delay(1000);
