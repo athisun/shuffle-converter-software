@@ -1,6 +1,0 @@
-{
-    "terminal.integrated.env.osx": {
-        "PATH": "/Users/isaac/.platformio/penv/bin:/Users/isaac/.platformio/penv:/Users/isaac/.cargo/bin:/Users/isaac/bin:/Users/isaac/go/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
-        "PLATFORMIO_CALLER": "vscode"
-    }
-}
