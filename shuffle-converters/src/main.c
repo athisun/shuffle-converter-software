@@ -205,11 +205,11 @@ int main(void)
   }
 
   // disable switchers
-  // ti switches are disabled when set/high (disable)
-  // the other ones are enabled high
-  HAL_GPIO_WritePin(DIS1_GPIO_Port, DIS1_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(DIS2_GPIO_Port, DIS2_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(DIS3_GPIO_Port, DIS3_Pin, GPIO_PIN_SET);
+  // ti switches are disabled when set/high (disable pin)
+  // the other new ones are enabled high (enable pin)
+  HAL_GPIO_WritePin(DIS1_GPIO_Port, DIS1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(DIS2_GPIO_Port, DIS2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(DIS3_GPIO_Port, DIS3_Pin, GPIO_PIN_RESET);
 
   // how to set a timer up
   // 50khz pwm freq
