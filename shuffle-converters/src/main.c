@@ -276,15 +276,22 @@ int main(void)
 
     printf("Current sense = %ld mV\n", adc_voltages[4]);
 
-    printf("dip 1: %d\n", HAL_GPIO_ReadPin(DIP1_GPIO_Port, DIP1_Pin));
-    printf("dip 2: %d\n", HAL_GPIO_ReadPin(DIP1_GPIO_Port, DIP1_Pin));
-    printf("dip 3: %d\n", HAL_GPIO_ReadPin(DIP1_GPIO_Port, DIP1_Pin));
-    printf("dip 4: %d\n", HAL_GPIO_ReadPin(DIP1_GPIO_Port, DIP1_Pin));
+    volatile GPIO_PinState dip1 = HAL_GPIO_ReadPin(DIP1_GPIO_Port, DIP1_Pin);
+    volatile GPIO_PinState dip2 = HAL_GPIO_ReadPin(DIP2_GPIO_Port, DIP2_Pin);
+    volatile GPIO_PinState dip3 = HAL_GPIO_ReadPin(DIP3_GPIO_Port, DIP3_Pin);
+    volatile GPIO_PinState dip4 = HAL_GPIO_ReadPin(DIP4_GPIO_Port, DIP4_Pin);
+
+    printf("dip 1: %d\n", dip1);
+    printf("dip 2: %d\n", dip2);
+    printf("dip 3: %d\n", dip3);
+    printf("dip 4: %d\n", dip4);
 
     // TODO: convert voltages from adc range to actual range using voltage divider calcs? or just work with adc reading voltages
 
     // TODO: adjust pwm duty cycle or on time?
     // should probably be on time due to the ability to calculate current through inductor and limit?
+
+    HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 
     HAL_Delay(1000);
   }
