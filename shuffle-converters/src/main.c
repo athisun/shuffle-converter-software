@@ -276,6 +276,11 @@ int main(void)
 
     printf("Current sense = %ld mV\n", adc_voltages[4]);
 
+    printf("dip 1: %d\n", HAL_GPIO_ReadPin(DIP1_GPIO_Port, DIP1_Pin));
+    printf("dip 2: %d\n", HAL_GPIO_ReadPin(DIP1_GPIO_Port, DIP1_Pin));
+    printf("dip 3: %d\n", HAL_GPIO_ReadPin(DIP1_GPIO_Port, DIP1_Pin));
+    printf("dip 4: %d\n", HAL_GPIO_ReadPin(DIP1_GPIO_Port, DIP1_Pin));
+
     // TODO: convert voltages from adc range to actual range using voltage divider calcs? or just work with adc reading voltages
 
     // TODO: adjust pwm duty cycle or on time?
@@ -292,7 +297,7 @@ int main(void)
 void Error_Handler(const char *format, ...)
 {
   // TODO: this should disable all the gate drivers, in an attempt to set to a "safe" state
-  
+
   // TODO: check if can is initialised a this point, and send the error message to can bus
 
   va_list args;
