@@ -43,7 +43,9 @@
 
 /* Private function prototypes -----------------------------------------------*/
 
+#ifdef DEBUG
 extern void initialise_monitor_handles(void);
+#endif
 
 /* Private user code ---------------------------------------------------------*/
 
@@ -178,8 +180,10 @@ void pwm_configure_timer(uint32_t pwm_frequency, uint32_t pulse_width_us, TIM_Ha
   */
 int main(void)
 {
+#ifdef DEBUG
   // semihosting init
   initialise_monitor_handles();
+#endif
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -217,7 +221,11 @@ int main(void)
   // which timer
   // from channel
   // to channel
-  // pwm_configure_timer(50000, 2, &htim1, TIM_CHANNEL_1, TIM_CHANNEL_2);
+  /*
+  pwm_configure_timer(50000, 2, &htim1, TIM_CHANNEL_1, TIM_CHANNEL_2);
+  pwm_configure_timer(50000, 2, &htim2, TIM_CHANNEL_1, TIM_CHANNEL_2);
+  pwm_configure_timer(50000, 2, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2);
+  */
 
   /* Infinite loop */
   while (1)
@@ -268,6 +276,11 @@ int main(void)
 
     printf("Current sense = %ld mV\n", adc_voltages[4]);
 
+    // TODO: convert voltages from adc range to actual range using voltage divider calcs? or just work with adc reading voltages
+
+    // TODO: adjust pwm duty cycle or on time?
+    // should probably be on time due to the ability to calculate current through inductor and limit?
+
     HAL_Delay(1000);
   }
 }
@@ -279,6 +292,8 @@ int main(void)
 void Error_Handler(const char *format, ...)
 {
   // TODO: this should disable all the gate drivers, in an attempt to set to a "safe" state
+  
+  // TODO: check if can is initialised a this point, and send the error message to can bus
 
   va_list args;
   va_start(args, format);
