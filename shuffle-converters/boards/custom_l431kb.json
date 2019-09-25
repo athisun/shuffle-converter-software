@@ -3,7 +3,6 @@
     "core": "stm32",
     "cpu": "cortex-m4",
     "extra_flags": "-DSTM32L431xx",
-    "f_cpu": "16000000L",
     "mcu": "stm32l431kbu3",
     "variant": "stm32l4"
   },
