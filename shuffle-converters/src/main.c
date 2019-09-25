@@ -41,6 +41,12 @@
 
 /* Private variables ---------------------------------------------------------*/
 
+CAN_TxHeaderTypeDef TxHeader;
+CAN_RxHeaderTypeDef RxHeader;
+uint8_t TxData[8];
+uint8_t RxData[8];
+uint32_t TxMailbox;
+
 /* Private function prototypes -----------------------------------------------*/
 
 #ifdef DEBUG
@@ -85,67 +91,85 @@ void pwm_configure_channel(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t m
   }
 }
 
-// configures a pwm timer and channels based on freq, pulse width
-// this stops, configures, then starts the pwm
-// formulas from http://www.emcu.eu/wp-content/uploads/2016/11/en.STM32L4_WDG_TIMERS_GPTIM.pdf
-void pwm_configure_timer(uint32_t pwm_frequency, uint32_t pulse_width_us, TIM_HandleTypeDef *htim, uint32_t channel_from, uint32_t channel_to)
+// starts the shuffling process on a given timer between two channels and voltage readings for those channels
+void shuffle(TIM_HandleTypeDef *htim, uint32_t channel1, uint32_t channel2, float vin2, float vin1)
 {
-
+  /*
   float period = 1.0 / pwm_frequency;
   float pulse_width = pulse_width_us * pow(10, -6);
   float duty = (float)((int)((pulse_width / period) * 100 + 0.5) / 100.0);
-
-  if (duty <= 0 || duty >= 1)
-  {
-    return;
-  }
+  */
 
   uint8_t timernum = get_timer_num(htim);
 
   // stop the timers before making changes to pwm
-  if (HAL_TIM_PWM_Stop(htim, channel_from) != HAL_OK)
+  if (HAL_TIM_PWM_Stop(htim, channel1) != HAL_OK)
   {
-    Error_Handler("error stopping from timer %d channel %d", timernum, channel_from);
+    Error_Handler("error stopping timer %d channel %d", timernum, channel1);
   }
-  if (HAL_TIM_PWM_Stop(htim, channel_to) != HAL_OK)
+  if (HAL_TIM_PWM_Stop(htim, channel2) != HAL_OK)
   {
-    Error_Handler("error stopping to timer %d channel %d", timernum, channel_to);
+    Error_Handler("error stopping timer %d channel %d", timernum, channel2);
+  }
+
+  volatile float err = 2 * vin1 - vin2;
+  volatile float vin = 2 * vin1 + vin2;
+  volatile float vout = vin1;
+  volatile float duty_cycle = vout / vin;
+
+  // don't shuffle if the duty cycle is full on or full off
+  if (duty_cycle <= 0 || duty_cycle >= 1)
+  {
+    return;
+  }
+
+  if (err > 0)
+  {
+    // if Vin1 > Vin2
+    duty_cycle = duty_cycle + 0.001;
+  }
+  else if (err < 0)
+  {
+    // Vin1 < Vin2
+    duty_cycle = duty_cycle - 0.001;
   }
 
   // get the frequency of the right timer clock based on the timer number
   // TODO: is there a nicer way to do this?
-  uint32_t ftim = 0;
+  uint32_t f_tim = 0;
   switch (timernum)
   {
   case 1:
   case 15:
-    ftim = HAL_RCC_GetPCLK1Freq();
+    f_tim = HAL_RCC_GetPCLK1Freq();
     break;
   case 2:
-    ftim = HAL_RCC_GetPCLK2Freq();
+    f_tim = HAL_RCC_GetPCLK2Freq();
     break;
   default:
     Error_Handler("unkown timer");
     break;
   }
 
+  const uint32_t f_pwm = 50000;
+
   // the PWM resolution gives the number of possible duty cycle values and indicates how fine the control on the PWM signal will be
   // The resolution, expressed in number of duty cycle steps, is simply equal to the ratio between the timer clock frequency
   // and the PWM frequency, the whole minus 1.
   // TODO: error if the resolution is too low? whats too low?
-  // float res = 1.0*ftim/pwm_frequency;
+  // float res = 1.0*f_tim/f_pwm;
 
   // start with a prescaler value of 0
   uint32_t psc = 0;
   // calculate the autoreload register
-  uint32_t arr = (ftim / (psc + 1)) / pwm_frequency;
+  uint32_t arr = f_tim / f_pwm;
 
   // assume 16 bit timer, adjust prescaler until arr is within 16 bit
   // could probably adjust this for the 32 bit timer but keep it consistent
   while (arr > 0xFFFF)
   {
     psc++;
-    arr = (ftim / (psc + 1)) / pwm_frequency;
+    arr = (f_tim / (psc + 1)) / f_pwm;
   }
 
   // reinititialise timer with new prescaler and period value
@@ -157,20 +181,20 @@ void pwm_configure_timer(uint32_t pwm_frequency, uint32_t pulse_width_us, TIM_Ha
   }
 
   // calculate counter reload register value (pulse count)
-  uint32_t ccrx = (duty * (arr + 1)) - 1;
+  uint32_t ccrx = (duty_cycle * (arr + 1)) - 1;
 
   // configure each timer pwm mode and pulse
-  pwm_configure_channel(htim, channel_from, (duty < 50 ? TIM_OCMODE_PWM1 : TIM_OCMODE_PWM2), ccrx);
-  pwm_configure_channel(htim, channel_to, (duty < 50 ? TIM_OCMODE_PWM2 : TIM_OCMODE_PWM1), arr - ccrx);
+  pwm_configure_channel(htim, channel1, (duty_cycle < 0.5 ? TIM_OCMODE_PWM1 : TIM_OCMODE_PWM2), ccrx);
+  pwm_configure_channel(htim, channel2, (duty_cycle < 0.5 ? TIM_OCMODE_PWM2 : TIM_OCMODE_PWM1), arr - ccrx);
 
   // start pwm timers
-  if (HAL_TIM_PWM_Start(htim, channel_from) != HAL_OK)
+  if (HAL_TIM_PWM_Start(htim, channel1) != HAL_OK)
   {
-    Error_Handler("error starting from timer %d channel %d", timernum, channel_from);
+    Error_Handler("error starting from timer %d channel %d", timernum, channel1);
   }
-  if (HAL_TIM_PWM_Start(htim, channel_to) != HAL_OK)
+  if (HAL_TIM_PWM_Start(htim, channel2) != HAL_OK)
   {
-    Error_Handler("error starting to timer %d channel %d", timernum, channel_to);
+    Error_Handler("error starting to timer %d channel %d", timernum, channel2);
   }
 }
 
@@ -209,23 +233,15 @@ int main(void)
   }
 
   // disable switchers
-  // ti switches are disabled when set/high (disable pin)
-  // the other new ones are enabled high (enable pin)
-  HAL_GPIO_WritePin(DIS1_GPIO_Port, DIS1_Pin, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(DIS2_GPIO_Port, DIS2_Pin, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(DIS3_GPIO_Port, DIS3_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(DIS1_GPIO_Port, DIS1_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(DIS2_GPIO_Port, DIS2_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(DIS3_GPIO_Port, DIS3_Pin, GPIO_PIN_SET);
 
-  // how to set a timer up
-  // 50khz pwm freq
-  // 2us pulse time
-  // which timer
-  // from channel
-  // to channel
-  /*
-  pwm_configure_timer(50000, 2, &htim1, TIM_CHANNEL_1, TIM_CHANNEL_2);
-  pwm_configure_timer(50000, 2, &htim2, TIM_CHANNEL_1, TIM_CHANNEL_2);
-  pwm_configure_timer(50000, 2, &htim15, TIM_CHANNEL_1, TIM_CHANNEL_2);
-  */
+  // start can
+  if (HAL_CAN_Start(&hcan1) != HAL_OK)
+  {
+    Error_Handler("error starting can");
+  }
 
   /* Infinite loop */
   while (1)
@@ -266,34 +282,51 @@ int main(void)
       adc_voltages[i] = __HAL_ADC_CALC_DATA_TO_VOLTAGE(vrefa, adc_values[i], ADC_RESOLUTION_12B);
     }
 
-    printf("adc reference voltage: %ld\n", vrefa);
-    printf("internal temp: %ld\n", temp);
+    // convert using the adc ratio
+    for (uint8_t i = 0; i < 4; i++)
+    {
+      adc_voltages[i] *= (15 * (i + 1)) / 3.3;
+    }
+
+    // printf("adc reference voltage: %ld\n", vrefa);
+    // printf("internal temp: %ld\n", temp);
 
     for (uint8_t i = 0; i < 4; i++)
     {
-      printf("VCC%d = %ld mV\n", 4 - i + 1, adc_voltages[i]);
+      // printf("VCC%d = %ld mV\n", i + 1, adc_voltages[i]);
     }
 
-    printf("Current sense = %ld mV\n", adc_voltages[4]);
+    // printf("Current sense = %ld mV\n", adc_voltages[4]);
 
     volatile GPIO_PinState dip1 = HAL_GPIO_ReadPin(DIP1_GPIO_Port, DIP1_Pin);
     volatile GPIO_PinState dip2 = HAL_GPIO_ReadPin(DIP2_GPIO_Port, DIP2_Pin);
     volatile GPIO_PinState dip3 = HAL_GPIO_ReadPin(DIP3_GPIO_Port, DIP3_Pin);
     volatile GPIO_PinState dip4 = HAL_GPIO_ReadPin(DIP4_GPIO_Port, DIP4_Pin);
 
-    printf("dip 1: %d\n", dip1);
-    printf("dip 2: %d\n", dip2);
-    printf("dip 3: %d\n", dip3);
-    printf("dip 4: %d\n", dip4);
+    // send device temperature
+    TxHeader.StdId = 10;
+    TxHeader.IDE = CAN_ID_STD;   // standard id
+    TxHeader.RTR = CAN_RTR_DATA; // data frame
+    TxHeader.DLC = 8;            // size of data in bytes
+    TxHeader.TransmitGlobalTime = DISABLE;
 
-    // TODO: convert voltages from adc range to actual range using voltage divider calcs? or just work with adc reading voltages
+    TxData[0] = (dip1) & (dip2 << 2) & (dip3 << 3) & (dip4 << 4);
+    TxData[1] = temp >> 24;
+    TxData[2] = temp >> 16;
+    TxData[3] = temp >>  8;
+    TxData[4] = temp;
 
-    // TODO: adjust pwm duty cycle or on time?
-    // should probably be on time due to the ability to calculate current through inductor and limit?
+    if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) != HAL_OK)
+    {
+      Error_Handler("error sending temperature");
+    }
+
+    // shuffle
+    // shuffle(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2, adc_voltages[0], adc_voltages[1] - adc_voltages[0]);
 
     HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 
-    HAL_Delay(1000);
+    HAL_Delay(100);
   }
 }
 
@@ -307,11 +340,13 @@ void Error_Handler(const char *format, ...)
 
   // TODO: check if can is initialised a this point, and send the error message to can bus
 
+  /*
   va_list args;
   va_start(args, format);
   vprintf(format, args);
   va_end(args);
-  printf("\n");
+  */
+  // printf("\n");
 
   /* User can add his own implementation to report the HAL error return state */
   HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
