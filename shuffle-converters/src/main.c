@@ -55,6 +55,27 @@ extern void initialise_monitor_handles(void);
 
 /* Private user code ---------------------------------------------------------*/
 
+void can_send(uint8_t id, uint8_t dip, uint32_t data)
+{
+  TxHeader.StdId = 10;
+  TxHeader.IDE = CAN_ID_STD;   // standard id
+  TxHeader.RTR = CAN_RTR_DATA; // data frame
+  TxHeader.DLC = 8;            // size of data in bytes
+  TxHeader.TransmitGlobalTime = DISABLE;
+
+  TxData[0] = id;
+  TxData[1] = dip;
+  TxData[2] = data >> 24;
+  TxData[3] = data >> 16;
+  TxData[4] = data >> 8;
+  TxData[5] = data;
+
+  if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) != HAL_OK)
+  {
+    // Error_Handler("error sending can msg");
+  }
+}
+
 // returns the timer number from the pointer based on the instance
 uint8_t get_timer_num(TIM_HandleTypeDef *htim)
 {
@@ -243,12 +264,12 @@ int main(void)
     Error_Handler("error starting can");
   }
 
-  volatile uint32_t count = 0;
+  volatile uint32_t loop_count = 0;
 
   /* Infinite loop */
   while (1)
   {
-    count++; 
+    loop_count++;
 
     // define an array where the adc values will be stored
     volatile uint32_t adc_values[7];
@@ -294,37 +315,32 @@ int main(void)
 
     // printf("adc reference voltage: %ld\n", vrefa);
     // printf("internal temp: %ld\n", temp);
-
+    
+    /*
     for (uint8_t i = 0; i < 4; i++)
     {
-      // printf("VCC%d = %ld mV\n", i + 1, adc_voltages[i]);
+      printf("VCC%d = %ld mV\n", i + 1, adc_voltages[i]);
     }
+    */
 
     // printf("Current sense = %ld mV\n", adc_voltages[4]);
 
-    volatile GPIO_PinState dip1 = HAL_GPIO_ReadPin(DIP1_GPIO_Port, DIP1_Pin);
-    volatile GPIO_PinState dip2 = HAL_GPIO_ReadPin(DIP2_GPIO_Port, DIP2_Pin);
-    volatile GPIO_PinState dip3 = HAL_GPIO_ReadPin(DIP3_GPIO_Port, DIP3_Pin);
-    volatile GPIO_PinState dip4 = HAL_GPIO_ReadPin(DIP4_GPIO_Port, DIP4_Pin);
-
-    // send device temperature
-    TxHeader.StdId = 10;
-    TxHeader.IDE = CAN_ID_STD;   // standard id
-    TxHeader.RTR = CAN_RTR_DATA; // data frame
-    TxHeader.DLC = 8;            // size of data in bytes
-    TxHeader.TransmitGlobalTime = DISABLE;
-
-    TxData[0] = (dip1) & (dip2 << 2) & (dip3 << 3) & (dip4 << 4);
-    TxData[1] = temp >> 24;
-    TxData[2] = temp >> 16;
-    TxData[3] = temp >>  8;
-    TxData[4] = temp;
-
-    HAL_CAN_IsTxMessagePending
-
-    if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) != HAL_OK)
+    if (loop_count > 10)
     {
-      Error_Handler("error sending temperature");
+      loop_count = 0;
+
+      GPIO_PinState dip1 = HAL_GPIO_ReadPin(DIP1_GPIO_Port, DIP1_Pin);
+      GPIO_PinState dip2 = HAL_GPIO_ReadPin(DIP2_GPIO_Port, DIP2_Pin);
+      GPIO_PinState dip3 = HAL_GPIO_ReadPin(DIP3_GPIO_Port, DIP3_Pin);
+      GPIO_PinState dip4 = HAL_GPIO_ReadPin(DIP4_GPIO_Port, DIP4_Pin);
+
+      uint8_t dip = dip1 & (dip2 << 2) & (dip3 << 3) & (dip4 << 4);
+
+      can_send(0, dip, temp);
+      for (uint8_t i = 0; i < 5; i++)
+      {
+        can_send(i + i, dip, adc_voltages[i]);
+      }
     }
 
     // shuffle
@@ -396,7 +412,7 @@ void Error_Handler(const char *format, ...)
 void assert_failed(char *file, uint32_t line)
 {
   /* User can add his own implementation to report the file name and line number, */
-  printf("Wrong parameters value: file %s on line %d\r\n", file, line)
+  // printf("Wrong parameters value: file %s on line %d\r\n", file, line)
 }
 #endif /* USE_FULL_ASSERT */
 
