@@ -1,9 +1,13 @@
 #include "mbed.h"
+#include "SDFileSystem.h"
 
 CAN can1(PA_11, PA_12);
 DigitalOut led1(PB_3);
 
 Serial pc(SERIAL_TX, SERIAL_RX);
+
+// csv format
+// time,id,type,format,length,data1,data2,data3,data4,data5,data6,data7,data8
 
 int main()
 {
@@ -33,7 +37,7 @@ int main()
     {
       pc.printf("No message found\n");
     }
-    
+
 
     wait_ms(50);
   }
