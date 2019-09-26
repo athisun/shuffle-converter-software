@@ -243,9 +243,13 @@ int main(void)
     Error_Handler("error starting can");
   }
 
+  volatile uint32_t count = 0;
+
   /* Infinite loop */
   while (1)
   {
+    count++; 
+    
     // define an array where the adc values will be stored
     volatile uint32_t adc_values[7];
     // start the adc peripheral
