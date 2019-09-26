@@ -41,10 +41,6 @@
 
 /* Private variables ---------------------------------------------------------*/
 
-CAN_TxHeaderTypeDef TxHeader;
-CAN_RxHeaderTypeDef RxHeader;
-uint8_t TxData[8];
-uint8_t RxData[8];
 uint32_t TxMailbox;
 
 /* Private function prototypes -----------------------------------------------*/
@@ -55,20 +51,48 @@ extern void initialise_monitor_handles(void);
 
 /* Private user code ---------------------------------------------------------*/
 
-void can_send(uint8_t id, uint8_t dip, uint32_t data)
+uint8_t debounce(GPIO_TypeDef *port, uint16_t pin)
 {
-  TxHeader.StdId = 10;
-  TxHeader.IDE = CAN_ID_STD;   // standard id
+  for (int i = 0; i < 8; i++)
+  {
+    if (HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_RESET)
+    {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+void can_send(uint8_t id, uint8_t dip, uint32_t data1, uint32_t data2)
+{
+  CAN_TxHeaderTypeDef TxHeader;
+  TxHeader.ExtId = (dip << 8) + id;
+  TxHeader.IDE = CAN_ID_EXT;   // standard id
   TxHeader.RTR = CAN_RTR_DATA; // data frame
   TxHeader.DLC = 8;            // size of data in bytes
   TxHeader.TransmitGlobalTime = DISABLE;
 
-  TxData[0] = id;
-  TxData[1] = dip;
-  TxData[2] = data >> 24;
-  TxData[3] = data >> 16;
-  TxData[4] = data >> 8;
-  TxData[5] = data;
+  uint8_t TxData[8];
+  TxData[0] = data1 >> 24;
+  TxData[2] = data1 >> 16;
+  TxData[2] = data1 >> 8;
+  TxData[3] = data1;
+
+  TxData[4] = data2 >> 24;
+  TxData[5] = data2 >> 16;
+  TxData[6] = data2 >> 8;
+  TxData[7] = data2;
+
+  uint32_t count = 0;
+  while (HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) == 0)
+  {
+    count++;
+    HAL_Delay(5);
+    if (count > 5)
+    {
+      return;
+    }
+  }
 
   if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) != HAL_OK)
   {
@@ -315,7 +339,7 @@ int main(void)
 
     // printf("adc reference voltage: %ld\n", vrefa);
     // printf("internal temp: %ld\n", temp);
-    
+
     /*
     for (uint8_t i = 0; i < 4; i++)
     {
@@ -329,18 +353,18 @@ int main(void)
     {
       loop_count = 0;
 
-      GPIO_PinState dip1 = HAL_GPIO_ReadPin(DIP1_GPIO_Port, DIP1_Pin);
-      GPIO_PinState dip2 = HAL_GPIO_ReadPin(DIP2_GPIO_Port, DIP2_Pin);
-      GPIO_PinState dip3 = HAL_GPIO_ReadPin(DIP3_GPIO_Port, DIP3_Pin);
-      GPIO_PinState dip4 = HAL_GPIO_ReadPin(DIP4_GPIO_Port, DIP4_Pin);
+      // use ! because internal pullup, dip pin pulls down to gnd
+      uint8_t dip1 = !debounce(DIP1_GPIO_Port, DIP1_Pin);
+      uint8_t dip2 = !debounce(DIP2_GPIO_Port, DIP2_Pin);
+      uint8_t dip3 = !debounce(DIP3_GPIO_Port, DIP3_Pin);
+      uint8_t dip4 = !debounce(DIP4_GPIO_Port, DIP4_Pin);
 
-      uint8_t dip = dip1 & (dip2 << 2) & (dip3 << 3) & (dip4 << 4);
+      uint8_t dip = dip1 | (dip2 << 1) | (dip3 << 2) | (dip4 << 3);
 
-      can_send(0, dip, temp);
-      for (uint8_t i = 0; i < 5; i++)
-      {
-        can_send(i + i, dip, adc_voltages[i]);
-      }
+      can_send(0, dip, temp, vrefa);
+      can_send(1, dip, adc_voltages[0], adc_voltages[1]);
+      can_send(2, dip, adc_voltages[2], adc_voltages[3]);
+      can_send(3, dip, adc_voltages[4], 0);
     }
 
     // shuffle
