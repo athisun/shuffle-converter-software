@@ -249,7 +249,7 @@ int main(void)
   while (1)
   {
     count++; 
-    
+
     // define an array where the adc values will be stored
     volatile uint32_t adc_values[7];
     // start the adc peripheral
@@ -319,6 +319,8 @@ int main(void)
     TxData[2] = temp >> 16;
     TxData[3] = temp >>  8;
     TxData[4] = temp;
+
+    HAL_CAN_IsTxMessagePending
 
     if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) != HAL_OK)
     {
