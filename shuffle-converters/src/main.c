@@ -41,8 +41,6 @@
 
 /* Private variables ---------------------------------------------------------*/
 
-uint32_t TxMailbox;
-
 /* Private function prototypes -----------------------------------------------*/
 
 #ifdef DEBUG
@@ -63,7 +61,7 @@ uint8_t debounce(GPIO_TypeDef *port, uint16_t pin)
   return 1;
 }
 
-void can_send(uint8_t id, uint8_t dip, uint32_t data1, uint32_t data2)
+uint32_t can_send(uint8_t id, uint8_t dip, uint32_t data1, uint32_t data2)
 {
   CAN_TxHeaderTypeDef TxHeader;
   TxHeader.ExtId = (dip << 8) + id;
@@ -94,10 +92,13 @@ void can_send(uint8_t id, uint8_t dip, uint32_t data1, uint32_t data2)
     }
   }
 
+  uint32_t TxMailbox;
   if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) != HAL_OK)
   {
     // Error_Handler("error sending can msg");
   }
+
+  return TxMailbox;
 }
 
 // returns the timer number from the pointer based on the instance
