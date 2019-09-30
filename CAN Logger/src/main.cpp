@@ -113,7 +113,7 @@ int main()
   }
 
   pc.printf("opening log file: %s", buffer1);
-  FILE *fp = fopen(buffer1, "w");
+  FILE *fp = fopen(buffer1, "w+");
   if (fp == NULL)
   {
     pc.printf("failed to open log file");
@@ -144,7 +144,6 @@ int main()
       // TODO: check if write fails and maybe restart micro?
       fprintf(fp, buffer2);
       fflush(fp);
-      sd.sync();
     }
 
     wait_ms(1);
