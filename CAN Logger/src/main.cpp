@@ -2,50 +2,87 @@
 
 #include "SDBlockDevice.h"
 #include "FATFileSystem.h"
+#include "DS3231.h"
+#include "mbed_mktime.h"
 
 SDBlockDevice sd(PA_7, PA_6, PA_5, PB_0); // mosi, miso, sclk, cs
 FATFileSystem fs("fs");
 
-CAN can1(PA_11, PA_12);
-DigitalOut led1(PB_3);
-Serial pc(SERIAL_TX, SERIAL_RX);
+CAN can1(PA_11, PA_12);          // initialise CAN1
+DigitalOut led1(PB_3);           // setup onboard LED
+Serial pc(SERIAL_TX, SERIAL_RX); // initialise uart to pc
 
+int hour;
+int minute;
+int second;
+
+int dayOfWeek; // Sun = 1, Mon = 2, etc.
+int date;
+int month;
+int year;
+// Initialise DS3231 RTC module
+DS3231 rtc(D4, D5);
+bool EN32kHz()
+{
+  int reg = rtc.readRegister(DS3231_Control_Status);
+  return (reg & DS3231_bit_EN32kHz);
+}
+
+// Set RTC date and time
+void rtc_setDateTime()
+{
+  rtc.setDate(2, 30, 9, 2019);
+  rtc.setTime(13, 28, 10);
+}
+
+// Buffers for CSV
 char buffer1[64] = {};
 char buffer2[256] = {};
 
-void sos()
+void sos();
+
+void setMcuTimeTest()
 {
-  led1.write(0);
-  while (1)
+  rtc.readDateTime(&dayOfWeek, &date, &month, &year, &hour, &minute, &second);
+
+  tm Time = {
+      .tm_sec = second,
+      .tm_min = minute,
+      .tm_hour = hour,
+      .tm_mday = date,
+      .tm_mon = month - 1,
+      .tm_year = year - 1900,
+      .tm_wday = dayOfWeek - 1};
+  time_t now = mktime(&Time);
+  if (now == -1)
   {
-    for (int i = 0; i < 3; i++)
-    {
-      led1 = !led1;
-      wait_ms(100);
-      led1 = !led1;
-      wait_ms(100);
-    }
-    for (int i = 0; i < 3; i++)
-    {
-      led1 = !led1;
-      wait_ms(300);
-      led1 = !led1;
-      wait_ms(300);
-    }
-    for (int i = 0; i < 3; i++)
-    {
-      led1 = !led1;
-      wait_ms(100);
-      led1 = !led1;
-      wait_ms(100);
-    }
+    sos();
   }
+  else
+  {
+    set_time(now);
+  }
+  time_t rawtime = time(NULL);
+  pc.printf("%lld\n", rawtime);
+
 }
 
 int main()
 {
   wait_ms(1000);
   pc.printf("Hello world!\n");
+
+  // rtc_setDateTime(); // Only need to run if not set
+  setMcuTimeTest();
+  // sos();
+  while (1)
+  {
+    rtc.readDateTime(&dayOfWeek, &date, &month, &year, &hour, &minute, &second);
+    pc.printf("date time : %i / %02i-%02i-%02i %02i:%02i:%02i", dayOfWeek, date, month, year, hour, minute, second);
+    pc.printf("\r\n");
+
+    wait_ms(5000);
+  }
 
   if (!can1.frequency(250000))
   {
@@ -111,5 +148,35 @@ int main()
     }
 
     wait_ms(1);
+  }
+}
+
+void sos()
+{
+  led1.write(0);
+  while (1)
+  {
+    for (int i = 0; i < 3; i++)
+    {
+      led1 = !led1;
+      wait_ms(100);
+      led1 = !led1;
+      wait_ms(100);
+    }
+    for (int i = 0; i < 3; i++)
+    {
+      led1 = !led1;
+      wait_ms(300);
+      led1 = !led1;
+      wait_ms(300);
+    }
+    for (int i = 0; i < 3; i++)
+    {
+      led1 = !led1;
+      wait_ms(100);
+      led1 = !led1;
+      wait_ms(100);
+    }
+    wait_ms(300);
   }
 }
