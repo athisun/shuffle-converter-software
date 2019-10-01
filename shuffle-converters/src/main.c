@@ -41,6 +41,32 @@
 
 /* Private variables ---------------------------------------------------------*/
 
+const uint8_t shuffle_counts[10] = {
+    3, // 0, A
+    2, // 1, B
+    3, // 2, C
+    3, // 3, D
+    3, // 4, E
+    2, // 5, F
+    1, // 6, G
+    3, // 7, H
+    3, // 8, I
+    3, // 8, J
+};
+
+const float shuffle_ratios[10][3] = {
+    {6.0 / 5.0, 10.0 / 6.0, 12.0 / 10.0},    // 0, A
+    {10.0 / 12.0, 12.0 / 10.0},              // 1, B
+    {10.0 / 10.0, 10.0 / 10.0, 10.0 / 10.0}, // 2, C
+    {10.0 / 10.0, 10.0 / 10.0, 10.0 / 10.0}, // 3, D
+    {10.0 / 10.0, 7.0 / 10.0, 14.0 / 7.0},   // 4, E
+    {14.0 / 14.0, 14.0 / 14.0},              // 5, F
+    {12.0 / 12.0},                           // 6, G
+    {12.0 / 12.0, 12.0 / 12.0, 12.0 / 12.0}, // 7, H
+    {12.0 / 12.0, 12.0 / 12.0, 12.0 / 12.0}, // 8, I
+    {14.0 / 12.0, 12.0 / 12.0, 12.0 / 12.0}, // 9, J
+};
+
 /* Private function prototypes -----------------------------------------------*/
 
 #ifdef DEBUG
@@ -61,7 +87,7 @@ uint8_t debounce(GPIO_TypeDef *port, uint16_t pin)
   return 1;
 }
 
-uint32_t can_send(uint8_t id, uint8_t dip, uint32_t data1, uint32_t data2)
+int8_t can_send(uint8_t id, uint8_t dip, uint32_t data1, uint32_t data2)
 {
   CAN_TxHeaderTypeDef TxHeader;
   TxHeader.ExtId = (dip << 8) + id;
@@ -82,13 +108,27 @@ uint32_t can_send(uint8_t id, uint8_t dip, uint32_t data1, uint32_t data2)
   TxData[7] = data2;
 
   uint32_t count = 0;
+  uint8_t aborted = 0;
   while (HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) == 0)
   {
     count++;
     HAL_Delay(5);
     if (count > 5)
     {
-      return;
+      count = 0;
+      // if mailbox requests have already been aborted, return failure
+      if (aborted)
+      {
+        return -1;
+      }
+      // abort all pending tx mailbox, the idea being only the latest can messages should be queued to send
+      // TODO: find a define of the count of mailboxes somewhere
+      //       seems to be 2 so hardcode?
+      aborted = 1;
+      for (uint8_t i = 0; i <= 2; i++)
+      {
+        HAL_CAN_AbortTxRequest(&hcan1, i);
+      }
     }
   }
 
@@ -138,7 +178,7 @@ void pwm_configure_channel(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t m
 }
 
 // starts the shuffling process on a given timer between two channels and voltage readings for those channels
-void shuffle(TIM_HandleTypeDef *htim, uint32_t channel1, uint32_t channel2, float vin2, float vin1)
+void do_shuffle(TIM_HandleTypeDef *htim, uint32_t channel1, uint32_t channel2, float vin2, float vin1, float ratio, uint32_t fpwm)
 {
   /*
   float period = 1.0 / pwm_frequency;
@@ -158,8 +198,15 @@ void shuffle(TIM_HandleTypeDef *htim, uint32_t channel1, uint32_t channel2, floa
     Error_Handler("error stopping timer %d channel %d", timernum, channel2);
   }
 
-  volatile float err = 2 * vin1 - vin2;
-  volatile float vin = 2 * vin1 + vin2;
+  // no shuffling to be performed on this input
+  // TODO: check voltages are close to 0 ?
+  if (ratio == 0)
+  {
+    return;
+  }
+
+  volatile float err = ratio * vin1 - vin2;
+  volatile float vin = ratio * vin1 + vin2;
   volatile float vout = vin1;
   volatile float duty_cycle = vout / vin;
 
@@ -168,6 +215,8 @@ void shuffle(TIM_HandleTypeDef *htim, uint32_t channel1, uint32_t channel2, floa
   {
     return;
   }
+
+  /*
 
   if (err > 0)
   {
@@ -196,8 +245,6 @@ void shuffle(TIM_HandleTypeDef *htim, uint32_t channel1, uint32_t channel2, floa
     Error_Handler("unkown timer");
     break;
   }
-
-  const uint32_t f_pwm = 50000;
 
   // the PWM resolution gives the number of possible duty cycle values and indicates how fine the control on the PWM signal will be
   // The resolution, expressed in number of duty cycle steps, is simply equal to the ratio between the timer clock frequency
@@ -242,6 +289,8 @@ void shuffle(TIM_HandleTypeDef *htim, uint32_t channel1, uint32_t channel2, floa
   {
     Error_Handler("error starting to timer %d channel %d", timernum, channel2);
   }
+
+  */
 }
 
 /**
@@ -332,10 +381,12 @@ int main(void)
       adc_voltages[i] = __HAL_ADC_CALC_DATA_TO_VOLTAGE(vrefa, adc_values[i], ADC_RESOLUTION_12B);
     }
 
+    volatile uint32_t shuffle_voltages[4];
+
     // convert using the adc ratio
     for (uint8_t i = 0; i < 4; i++)
     {
-      adc_voltages[i] *= (15 * (i + 1)) / 3.3;
+      shuffle_voltages[i] = adc_voltages[i] * (15.0 * (i + 1.0)) / 3.3;
     }
 
     // printf("adc reference voltage: %ld\n", vrefa);
@@ -350,28 +401,35 @@ int main(void)
 
     // printf("Current sense = %ld mV\n", adc_voltages[4]);
 
+    // use ! because internal pullup, dip pin pulls down to gnd
+    uint8_t dip1 = !debounce(DIP1_GPIO_Port, DIP1_Pin);
+    uint8_t dip2 = !debounce(DIP2_GPIO_Port, DIP2_Pin);
+    uint8_t dip3 = !debounce(DIP3_GPIO_Port, DIP3_Pin);
+    uint8_t dip4 = !debounce(DIP4_GPIO_Port, DIP4_Pin);
+
+    uint8_t dip = dip1 | (dip2 << 1) | (dip3 << 2) | (dip4 << 3);
+
+    // send a can packet once every 10 loops (if a loop is 0.1 second, approx every 1 second)
     if (loop_count > 10)
     {
       loop_count = 0;
-
-      // use ! because internal pullup, dip pin pulls down to gnd
-      uint8_t dip1 = !debounce(DIP1_GPIO_Port, DIP1_Pin);
-      uint8_t dip2 = !debounce(DIP2_GPIO_Port, DIP2_Pin);
-      uint8_t dip3 = !debounce(DIP3_GPIO_Port, DIP3_Pin);
-      uint8_t dip4 = !debounce(DIP4_GPIO_Port, DIP4_Pin);
-
-      uint8_t dip = dip1 | (dip2 << 1) | (dip3 << 2) | (dip4 << 3);
 
       can_send(0, dip, temp, vrefa);
       can_send(1, dip, adc_voltages[0], adc_voltages[1]);
       can_send(2, dip, adc_voltages[2], adc_voltages[3]);
       can_send(3, dip, adc_voltages[4], 0);
+      can_send(4, dip, shuffle_voltages[0], shuffle_voltages[1]);
+      can_send(5, dip, shuffle_voltages[2], shuffle_voltages[3]);
+
+      HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
     }
 
     // shuffle
-    // shuffle(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2, adc_voltages[0], adc_voltages[1] - adc_voltages[0]);
-
-    HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+    const uint32_t fpwm = 50000;
+    const float *ratio = shuffle_ratios[dip];
+    do_shuffle(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2, shuffle_voltages[0], shuffle_voltages[1] - shuffle_voltages[0], ratio[0], fpwm);
+    do_shuffle(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2, shuffle_voltages[1], shuffle_voltages[2] - shuffle_voltages[1], ratio[1], fpwm);
+    do_shuffle(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, shuffle_voltages[2], shuffle_voltages[3] - shuffle_voltages[2], ratio[2], fpwm);
 
     HAL_Delay(100);
   }
