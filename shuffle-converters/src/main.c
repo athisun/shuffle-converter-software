@@ -35,36 +35,33 @@
 
 /* Private typedef -----------------------------------------------------------*/
 
+// union type for converting floats to integers
+union FloatConv {
+  float f;
+  uint32_t i;
+};
+
 /* Private define ------------------------------------------------------------*/
+
+// base can id for can messages
+#define CAN_BASE_ID 0x400
 
 /* Private macro -------------------------------------------------------------*/
 
 /* Private variables ---------------------------------------------------------*/
 
-const uint8_t shuffle_counts[10] = {
-    3, // 0, A
-    2, // 1, B
-    3, // 2, C
-    3, // 3, D
-    3, // 4, E
-    2, // 5, F
-    1, // 6, G
-    3, // 7, H
-    3, // 8, I
-    3, // 8, J
-};
-
-const float shuffle_ratios[10][3] = {
-    {6.0 / 5.0, 10.0 / 6.0, 12.0 / 10.0},    // 0, A
-    {10.0 / 12.0, 12.0 / 10.0},              // 1, B
-    {10.0 / 10.0, 10.0 / 10.0, 10.0 / 10.0}, // 2, C
-    {10.0 / 10.0, 10.0 / 10.0, 10.0 / 10.0}, // 3, D
-    {10.0 / 10.0, 7.0 / 10.0, 14.0 / 7.0},   // 4, E
-    {14.0 / 14.0, 14.0 / 14.0},              // 5, F
-    {12.0 / 12.0},                           // 6, G
-    {12.0 / 12.0, 12.0 / 12.0, 12.0 / 12.0}, // 7, H
-    {12.0 / 12.0, 12.0 / 12.0, 12.0 / 12.0}, // 8, I
-    {14.0 / 12.0, 12.0 / 12.0, 12.0 / 12.0}, // 9, J
+// store the counts of the string cells
+const uint8_t string_cell_counts[10][4] = {
+    {6, 5, 10, 12},   // 0, A = 3
+    {12, 10, 10},     // 1, B = 2
+    {10, 10, 10, 10}, // 2, C = 3
+    {10, 10, 10, 10}, // 3, D = 3
+    {10, 10, 7, 14},  // 4, E = 3
+    {14, 14, 14},     // 5, F = 2
+    {12, 12},         // 6, G = 1
+    {12, 12, 12, 12}, // 7, H = 3
+    {12, 12, 12, 12}, // 8, I = 3
+    {12, 14, 14, 14}, // 9, J = 3
 };
 
 /* Private function prototypes -----------------------------------------------*/
@@ -75,6 +72,8 @@ extern void initialise_monitor_handles(void);
 
 /* Private user code ---------------------------------------------------------*/
 
+// simple debounce function for reading io pins
+// only returns 1 if all read samples are 1
 uint8_t debounce(GPIO_TypeDef *port, uint16_t pin)
 {
   for (int i = 0; i < 8; i++)
@@ -87,32 +86,29 @@ uint8_t debounce(GPIO_TypeDef *port, uint16_t pin)
   return 1;
 }
 
-int8_t can_send(uint8_t id, uint8_t dip, uint32_t data1, uint32_t data2)
+// sends a can message with given id, length and data
+// returns the tx mailbox id on success, -1 on failure
+int32_t can_send(uint16_t id, uint8_t len, uint8_t data[])
 {
-  CAN_TxHeaderTypeDef TxHeader;
-  TxHeader.ExtId = (dip << 8) + id;
-  TxHeader.IDE = CAN_ID_EXT;   // standard id
-  TxHeader.RTR = CAN_RTR_DATA; // data frame
-  TxHeader.DLC = 8;            // size of data in bytes
-  TxHeader.TransmitGlobalTime = DISABLE;
+  // limit message data length to 8
+  if (len > 8)
+  {
+    len = 8;
+  }
 
-  uint8_t TxData[8];
-  TxData[0] = data1 >> 24;
-  TxData[2] = data1 >> 16;
-  TxData[2] = data1 >> 8;
-  TxData[3] = data1;
-
-  TxData[4] = data2 >> 24;
-  TxData[5] = data2 >> 16;
-  TxData[6] = data2 >> 8;
-  TxData[7] = data2;
+  CAN_TxHeaderTypeDef header;
+  header.ExtId = (CAN_BASE_ID + id);
+  header.IDE = CAN_ID_STD;   // standard id
+  header.RTR = CAN_RTR_DATA; // data frame
+  header.DLC = len;          // size of data in bytes
+  header.TransmitGlobalTime = DISABLE;
 
   uint32_t count = 0;
   uint8_t aborted = 0;
   while (HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) == 0)
   {
     count++;
-    HAL_Delay(5);
+    HAL_Delay(1);
     if (count > 5)
     {
       count = 0;
@@ -132,13 +128,71 @@ int8_t can_send(uint8_t id, uint8_t dip, uint32_t data1, uint32_t data2)
     }
   }
 
-  uint32_t TxMailbox;
-  if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) != HAL_OK)
+  uint32_t mailbox;
+  if (HAL_CAN_AddTxMessage(&hcan1, &header, data, &mailbox) != HAL_OK)
   {
+    // dont enter sos mode here, instead transparently ignore error
     // Error_Handler("error sending can msg");
+    return -1;
   }
 
-  return TxMailbox;
+  return mailbox;
+}
+
+// send a single byte can message
+int8_t can_send_id(uint8_t id, uint8_t dip)
+{
+  return can_send(id, 1, &dip);
+}
+
+// send a two byte can message
+// first byte is the dip switch configuration
+// data byte is the dip switch configuration
+int8_t can_send_u8(uint8_t id, uint8_t dip, uint8_t data)
+{
+  uint8_t b[2] = {dip, data};
+  return can_send(id, sizeof(b), b);
+}
+
+// send a three byte can message
+// first byte is the dip switch configuration
+// second two are the u16 data
+int8_t can_send_u16(uint8_t id, uint8_t dip, uint16_t data)
+{
+  uint8_t b[3] = {dip};
+  b[1] = (data >> 8) & 0xff;
+  b[2] = data & 0xff;
+  return can_send(id, sizeof(b), b);
+}
+
+// send a five byte can message
+// first byte is the dip switch configuration
+// next four are the u32 data
+int8_t can_send_u32(uint8_t id, uint8_t dip, uint32_t data)
+{
+  uint8_t b[5] = {dip};
+  b[1] = (data >> 24) & 0xff;
+  b[2] = (data >> 16) & 0xff;
+  b[3] = (data >> 8) & 0xff;
+  b[4] = data & 0xff;
+  return can_send(id, sizeof(b), b);
+}
+
+// send an eight byte can message
+// first byte is the dip switch configuration
+// next 7 are the u64 data
+// NOTE: top byte is essentially masked from u64 data (ie, not included)
+int8_t can_send_u64(uint8_t id, uint8_t dip, uint64_t data)
+{
+  uint8_t b[8] = {dip};
+  b[1] = (data >> 48) & 0xff;
+  b[2] = (data >> 40) & 0xff;
+  b[3] = (data >> 32) & 0xff;
+  b[4] = (data >> 24) & 0xff;
+  b[5] = (data >> 16) & 0xff;
+  b[6] = (data >> 8) & 0xff;
+  b[7] = data & 0xff;
+  return can_send(id, sizeof(b), b);
 }
 
 // returns the timer number from the pointer based on the instance
@@ -178,73 +232,56 @@ void pwm_configure_channel(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t m
 }
 
 // starts the shuffling process on a given timer between two channels and voltage readings for those channels
-void do_shuffle(TIM_HandleTypeDef *htim, uint32_t channel1, uint32_t channel2, float vin2, float vin1, float ratio, uint32_t fpwm)
+// timer channel 1, vin1 (string voltage), and cell_count1 (number of cells in string) are the low side
+// timer channel 2, vin2 (string voltage), and cell_count2 (number of cells in string) are the high side
+// timer and pwm frequency are in Hz
+// duty cycle and direction are pointers and will be modified to reflect the updated values
+void do_shuffle(TIM_HandleTypeDef *htim, const uint32_t channel1, const uint32_t channel2,
+                GPIO_TypeDef *dis_port, const uint32_t dis_pin,
+                const uint32_t vin1, const uint32_t vin2, const uint8_t cell_count1, const uint8_t cell_count2,
+                const uint32_t f_tim, const uint32_t f_pwm,
+                float *duty_cycle, float *direction,
+                const uint32_t Gi_VS, const uint32_t VoltSecMin, const uint32_t VoltSecMax)
 {
-  /*
-  float period = 1.0 / pwm_frequency;
-  float pulse_width = pulse_width_us * pow(10, -6);
-  float duty = (float)((int)((pulse_width / period) * 100 + 0.5) / 100.0);
-  */
-
-  uint8_t timernum = get_timer_num(htim);
+  // disable gate driver
+  HAL_GPIO_WritePin(dis_port, dis_pin, GPIO_PIN_SET);
 
   // stop the timers before making changes to pwm
   if (HAL_TIM_PWM_Stop(htim, channel1) != HAL_OK)
   {
+    uint8_t timernum = get_timer_num(htim);
     Error_Handler("error stopping timer %d channel %d", timernum, channel1);
   }
   if (HAL_TIM_PWM_Stop(htim, channel2) != HAL_OK)
   {
+    uint8_t timernum = get_timer_num(htim);
     Error_Handler("error stopping timer %d channel %d", timernum, channel2);
   }
 
-  // no shuffling to be performed on this input
-  // TODO: check voltages are close to 0 ?
-  if (ratio == 0)
+  // if no shuffling to be performed on this input, return after timers and gate drivers are disabled/off
+  if (cell_count1 == 0 || cell_count2 == 0)
   {
     return;
   }
 
-  volatile float err = ratio * vin1 - vin2;
-  volatile float vin = ratio * vin1 + vin2;
-  volatile float vout = vin1;
-  volatile float duty_cycle = vout / vin;
+  // normalise the string -> cell voltages
+  float vin1_norm = vin1 / (float)cell_count1;
+  float vin2_norm = vin2 / (float)cell_count2;
 
-  // don't shuffle if the duty cycle is full on or full off
-  if (duty_cycle <= 0 || duty_cycle >= 1)
-  {
-    return;
-  }
+  // normalise the cell voltages and calculate the error
+  volatile float err = vin1_norm - vin2_norm;
 
-  /*
+  // adjust the duty cycle based on the gain and error
+  float D = (*duty_cycle) + 0.005 * err;
 
-  if (err > 0)
-  {
-    // if Vin1 > Vin2
-    duty_cycle = duty_cycle + 0.001;
-  }
-  else if (err < 0)
-  {
-    // Vin1 < Vin2
-    duty_cycle = duty_cycle - 0.001;
-  }
+  // limits: -duty_max <= duty cycle <= duty_max
+  D = fmaxf(fminf(D, 0.45), -0.45);
 
-  // get the frequency of the right timer clock based on the timer number
-  // TODO: is there a nicer way to do this?
-  uint32_t f_tim = 0;
-  switch (timernum)
-  {
-  case 1:
-  case 15:
-    f_tim = HAL_RCC_GetPCLK1Freq();
-    break;
-  case 2:
-    f_tim = HAL_RCC_GetPCLK2Freq();
-    break;
-  default:
-    Error_Handler("unkown timer");
-    break;
-  }
+  // copy the sign from the duty cycle to store direction of switching
+  *direction = copysign(1.0, D);
+
+  // copy the absolute value from the duty cycle and store
+  *duty_cycle = fabsf(D);
 
   // the PWM resolution gives the number of possible duty cycle values and indicates how fine the control on the PWM signal will be
   // The resolution, expressed in number of duty cycle steps, is simply equal to the ratio between the timer clock frequency
@@ -270,27 +307,41 @@ void do_shuffle(TIM_HandleTypeDef *htim, uint32_t channel1, uint32_t channel2, f
   htim->Init.Period = arr;
   if (HAL_TIM_PWM_Init(htim) != HAL_OK)
   {
+    uint8_t timernum = get_timer_num(htim);
     Error_Handler("error initialising timer %d pwm (psc: %ld, arr: %ld)", timernum, psc, arr);
   }
 
   // calculate counter reload register value (pulse count)
-  uint32_t ccrx = (duty_cycle * (arr + 1)) - 1;
+  uint32_t ccrx = ((*duty_cycle) * (arr + 1)) - 1;
 
   // configure each timer pwm mode and pulse
-  pwm_configure_channel(htim, channel1, (duty_cycle < 0.5 ? TIM_OCMODE_PWM1 : TIM_OCMODE_PWM2), ccrx);
-  pwm_configure_channel(htim, channel2, (duty_cycle < 0.5 ? TIM_OCMODE_PWM2 : TIM_OCMODE_PWM1), arr - ccrx);
+  if (direction > 0)
+  {
+    // if the direction is positive (up the string), switch the bottom gate first
+    pwm_configure_channel(htim, channel1, TIM_OCMODE_PWM1, ccrx);
+    pwm_configure_channel(htim, channel2, TIM_OCMODE_PWM2, arr - ccrx);
+  }
+  else
+  {
+    // if the direction is negative (down the string), switch the top gate first
+    pwm_configure_channel(htim, channel1, TIM_OCMODE_PWM2, ccrx);
+    pwm_configure_channel(htim, channel2, TIM_OCMODE_PWM1, arr - ccrx);
+  }
 
   // start pwm timers
   if (HAL_TIM_PWM_Start(htim, channel1) != HAL_OK)
   {
+    uint8_t timernum = get_timer_num(htim);
     Error_Handler("error starting from timer %d channel %d", timernum, channel1);
   }
   if (HAL_TIM_PWM_Start(htim, channel2) != HAL_OK)
   {
+    uint8_t timernum = get_timer_num(htim);
     Error_Handler("error starting to timer %d channel %d", timernum, channel2);
   }
 
-  */
+  // enable gate driver
+  HAL_GPIO_WritePin(dis_port, dis_pin, GPIO_PIN_RESET);
 }
 
 /**
@@ -327,7 +378,7 @@ int main(void)
     Error_Handler("error calbrating adc");
   }
 
-  // disable switchers
+  // disable gate drivers
   HAL_GPIO_WritePin(DIS1_GPIO_Port, DIS1_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(DIS2_GPIO_Port, DIS2_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(DIS3_GPIO_Port, DIS3_Pin, GPIO_PIN_SET);
@@ -338,15 +389,39 @@ int main(void)
     Error_Handler("error starting can");
   }
 
-  volatile uint32_t loop_count = 0;
+  // stores the time in ms that the last can messages was sent
+  uint32_t can_last_update = HAL_GetTick();
+  const uint32_t can_update_period = 1000;
+
+  // structures to store shuffle converter direction and duty cycles
+  struct
+  {
+    union FloatConv direction;
+    union FloatConv duty_cycle;
+  } shuffle_converter1 = {0}, shuffle_converter2 = {0}, shuffle_converter3 = {0};
+
+  // define an array where the adc values will be stored
+  uint32_t adc_values[7];
+  // array FOR converted adc voltages
+  uint32_t adc_voltages[5];
+  // array for converted series string voltages
+  uint32_t string_voltages[4];
+  // mcu temp and analog ref voltage
+  uint32_t vrefa, temp;
+
+  // pwm frequency (Hz)
+  const uint32_t pwm_freq = 50000;
+
+  // shuffle constants
+  const uint32_t iteration_period = 10;                            // 10 ms
+  const uint32_t Gi_VS = 1000;                                     // (mV) VoltSec integral Gain per second.
+  const uint32_t Gi_VS2 = Gi_VS * (1 / (float)pwm_freq) / 1000000; // unused?
+  const uint32_t VoltSecMin = 100;                                 // mV.us = 0.1 V.us = 10mA i_pk for L=10uH
+  const uint32_t VoltSecMax = 40000;                               // mV.us = 40 V.us = 4A i_pk for L=10uH
 
   /* Infinite loop */
   while (1)
   {
-    loop_count++;
-
-    // define an array where the adc values will be stored
-    volatile uint32_t adc_values[7];
     // start the adc peripheral
     if (HAL_ADC_Start(&hadc1) != HAL_OK)
     {
@@ -355,7 +430,7 @@ int main(void)
     // read the adc peripheral a number of times for each "rank" aka channel setup
     for (uint8_t i = 0; i < 7; i++)
     {
-      volatile HAL_StatusTypeDef result = HAL_ADC_PollForConversion(&hadc1, 1000);
+      HAL_StatusTypeDef result = HAL_ADC_PollForConversion(&hadc1, 1000);
       if (result != HAL_OK)
       {
         Error_Handler("error polling for conversion %d", i);
@@ -369,69 +444,83 @@ int main(void)
     }
 
     // calculate the analog refererence voltage from the vrefint channel
-    volatile uint32_t vrefa = __HAL_ADC_CALC_VREFANALOG_VOLTAGE(adc_values[6], ADC_RESOLUTION_12B);
+    vrefa = __HAL_ADC_CALC_VREFANALOG_VOLTAGE(adc_values[6], ADC_RESOLUTION_12B);
 
     // calculate the internal temperature sensor from the internal channel
-    volatile uint32_t temp = __HAL_ADC_CALC_TEMPERATURE(vrefa, adc_values[5], ADC_RESOLUTION_12B);
+    temp = __HAL_ADC_CALC_TEMPERATURE(vrefa, adc_values[5], ADC_RESOLUTION_12B);
 
     // convert all the adc values to voltages using the analog reference voltage
-    volatile uint32_t adc_voltages[5];
     for (uint8_t i = 0; i < 5; i++)
     {
       adc_voltages[i] = __HAL_ADC_CALC_DATA_TO_VOLTAGE(vrefa, adc_values[i], ADC_RESOLUTION_12B);
     }
 
-    volatile uint32_t shuffle_voltages[4];
-
     // convert using the adc ratio
     for (uint8_t i = 0; i < 4; i++)
     {
-      shuffle_voltages[i] = adc_voltages[i] * (15.0 * (i + 1.0)) / 3.3;
+      string_voltages[i] = adc_voltages[i] * (15.0 * (i + 1.0)) / 3.3;
     }
-
-    // printf("adc reference voltage: %ld\n", vrefa);
-    // printf("internal temp: %ld\n", temp);
-
-    /*
-    for (uint8_t i = 0; i < 4; i++)
-    {
-      printf("VCC%d = %ld mV\n", i + 1, adc_voltages[i]);
-    }
-    */
-
-    // printf("Current sense = %ld mV\n", adc_voltages[4]);
 
     // use ! because internal pullup, dip pin pulls down to gnd
     uint8_t dip1 = !debounce(DIP1_GPIO_Port, DIP1_Pin);
     uint8_t dip2 = !debounce(DIP2_GPIO_Port, DIP2_Pin);
     uint8_t dip3 = !debounce(DIP3_GPIO_Port, DIP3_Pin);
     uint8_t dip4 = !debounce(DIP4_GPIO_Port, DIP4_Pin);
-
     uint8_t dip = dip1 | (dip2 << 1) | (dip3 << 2) | (dip4 << 3);
 
-    // send a can packet once every 10 loops (if a loop is 0.1 second, approx every 1 second)
-    if (loop_count > 10)
-    {
-      loop_count = 0;
+    // individual string voltages
+    uint32_t VCC2 = string_voltages[0];
+    uint32_t VCC3 = string_voltages[1] - string_voltages[0];
+    uint32_t VCC4 = string_voltages[2] - string_voltages[1];
+    uint32_t VCC5 = string_voltages[3] - string_voltages[2];
 
-      can_send(0, dip, temp, vrefa);
-      can_send(1, dip, adc_voltages[0], adc_voltages[1]);
-      can_send(2, dip, adc_voltages[2], adc_voltages[3]);
-      can_send(3, dip, adc_voltages[4], 0);
-      can_send(4, dip, shuffle_voltages[0], shuffle_voltages[1]);
-      can_send(5, dip, shuffle_voltages[2], shuffle_voltages[3]);
+    // shuffle operation
+    do_shuffle(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2,
+               DIS1_GPIO_Port, DIS1_Pin,
+               VCC2, VCC3, string_cell_counts[dip][0], string_cell_counts[dip][1],
+               HAL_RCC_GetPCLK1Freq(), pwm_freq,
+               &shuffle_converter1.duty_cycle.f, &shuffle_converter1.direction.f,
+               Gi_VS, VoltSecMin, VoltSecMax);
+
+    /*
+    do_shuffle(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2,
+               DIS2_GPIO_Port, DIS2_Pin,
+               VCC3, VCC4, shuffle_ratio2,
+               HAL_RCC_GetPCLK2Freq(), pwm_freq,
+               &shuffle_converter2_dutycycle.f);
+
+    do_shuffle(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2,
+               DIS3_GPIO_Port, DIS3_Pin,
+               VCC4, VCC5, shuffle_ratio3,
+               HAL_RCC_GetPCLK1Freq(), pwm_freq,
+               &shuffle_converter3_dutycycle.f);
+               */
+
+    // send a can packet once every update period
+    if (HAL_GetTick() - can_last_update > can_update_period)
+    {
+      can_last_update = HAL_GetTick();
+
+      // send mcu temp and adc vref
+      can_send_u32(0, dip, (temp << 16) + (vrefa & 0xffff));
+      // send all read string voltages, assume string voltages aren't greater than 16 bit
+      // ie, no voltage over 2^16=65535mV or 65.5V
+      can_send_u32(1, dip, (VCC2 << 16) + (VCC3 & 0xffff));
+      can_send_u32(2, dip, (VCC4 << 16) + (VCC5 & 0xffff));
+      // and converted shuffle duty cycles + directions
+      // inlcude both the sign for direction and duty cycle
+      union FloatConv dc;
+      dc.f = shuffle_converter1.duty_cycle.f * (shuffle_converter1.direction.f == 0 ? 1 : shuffle_converter1.direction.f);
+      can_send_u32(3, dip, dc.i);
+      dc.f = shuffle_converter2.duty_cycle.f * (shuffle_converter2.direction.f == 0 ? 1 : shuffle_converter2.direction.f);
+      can_send_u32(4, dip, dc.i);
+      dc.f = shuffle_converter3.duty_cycle.f * (shuffle_converter3.direction.f == 0 ? 1 : shuffle_converter3.direction.f);
+      can_send_u32(5, dip, dc.i);
 
       HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
     }
 
-    // shuffle
-    const uint32_t fpwm = 50000;
-    const float *ratio = shuffle_ratios[dip];
-    do_shuffle(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2, shuffle_voltages[0], shuffle_voltages[1] - shuffle_voltages[0], ratio[0], fpwm);
-    do_shuffle(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2, shuffle_voltages[1], shuffle_voltages[2] - shuffle_voltages[1], ratio[1], fpwm);
-    do_shuffle(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, shuffle_voltages[2], shuffle_voltages[3] - shuffle_voltages[2], ratio[2], fpwm);
-
-    HAL_Delay(100);
+    HAL_Delay(iteration_period);
   }
 }
 
