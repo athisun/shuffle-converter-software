@@ -344,6 +344,66 @@ void do_shuffle(TIM_HandleTypeDef *htim, const uint32_t channel1, const uint32_t
   HAL_GPIO_WritePin(dis_port, dis_pin, GPIO_PIN_RESET);
 }
 
+// measure adc values
+// note: string_voltages[n] decays to a pointer (ie: uint32_t *string_voltages), not the best way to do this
+// just an indiciation to user as to the size of the array that should be passed in
+void measure_adc(uint32_t string_voltages[4], uint32_t *vcurrentsense, uint32_t *vrefa, uint32_t *temp)
+{
+  // define an array where the adc values will be stored
+  uint32_t adc_values[7];
+  // array FOR converted adc voltages
+  uint32_t adc_voltages[5];
+  // start the adc peripheral
+  if (HAL_ADC_Start(&hadc1) != HAL_OK)
+  {
+    Error_Handler("error starting adc");
+  }
+  // read the adc peripheral a number of times for each "rank" aka channel setup
+  for (uint8_t i = 0; i < 7; i++)
+  {
+    HAL_StatusTypeDef result = HAL_ADC_PollForConversion(&hadc1, 1000);
+    if (result != HAL_OK)
+    {
+      Error_Handler("error polling for conversion %d", i);
+    }
+    adc_values[i] = HAL_ADC_GetValue(&hadc1);
+  }
+  // stop the adc peripheral
+  if (HAL_ADC_Stop(&hadc1) != HAL_OK)
+  {
+    Error_Handler("error stopping adc");
+  }
+
+  // calculate the analog refererence voltage from the vrefint channel
+  *vrefa = __HAL_ADC_CALC_VREFANALOG_VOLTAGE(adc_values[6], ADC_RESOLUTION_12B);
+
+  // calculate the internal temperature sensor from the internal channel
+  *temp = __HAL_ADC_CALC_TEMPERATURE(*vrefa, adc_values[5], ADC_RESOLUTION_12B);
+
+  // convert all the adc values to voltages using the analog reference voltage
+  for (uint8_t i = 0; i < 5; i++)
+  {
+    adc_voltages[i] = __HAL_ADC_CALC_DATA_TO_VOLTAGE(*vrefa, adc_values[i], ADC_RESOLUTION_12B);
+  }
+
+  // convert using the adc ratio
+  for (uint8_t i = 0; i < 4; i++)
+  {
+    string_voltages[i] = adc_voltages[i] * (15.0 * (i + 1.0)) / 3.3;
+  }
+}
+
+// read dip switches
+uint8_t read_dip()
+{
+  // use ! because internal pullup, dip pin pulls down to gnd
+  uint8_t dip1 = !debounce(DIP1_GPIO_Port, DIP1_Pin);
+  uint8_t dip2 = !debounce(DIP2_GPIO_Port, DIP2_Pin);
+  uint8_t dip3 = !debounce(DIP3_GPIO_Port, DIP3_Pin);
+  uint8_t dip4 = !debounce(DIP4_GPIO_Port, DIP4_Pin);
+  return dip1 | (dip2 << 1) | (dip3 << 2) | (dip4 << 3);
+}
+
 /**
   * @brief  The application entry point.
   * @retval int
@@ -400,14 +460,10 @@ int main(void)
     union FloatConv duty_cycle;
   } shuffle_converter1 = {0}, shuffle_converter2 = {0}, shuffle_converter3 = {0};
 
-  // define an array where the adc values will be stored
-  uint32_t adc_values[7];
-  // array FOR converted adc voltages
-  uint32_t adc_voltages[5];
-  // array for converted series string voltages
-  uint32_t string_voltages[4];
   // mcu temp and analog ref voltage
-  uint32_t vrefa, temp;
+  uint32_t vrefa = 0, temp = 0, vcurrentsense = 0;
+  // string voltages
+  uint32_t string_voltages[4] = {};
 
   // pwm frequency (Hz)
   const uint32_t pwm_freq = 50000;
@@ -422,62 +478,16 @@ int main(void)
   /* Infinite loop */
   while (1)
   {
-    // start the adc peripheral
-    if (HAL_ADC_Start(&hadc1) != HAL_OK)
-    {
-      Error_Handler("error starting adc");
-    }
-    // read the adc peripheral a number of times for each "rank" aka channel setup
-    for (uint8_t i = 0; i < 7; i++)
-    {
-      HAL_StatusTypeDef result = HAL_ADC_PollForConversion(&hadc1, 1000);
-      if (result != HAL_OK)
-      {
-        Error_Handler("error polling for conversion %d", i);
-      }
-      adc_values[i] = HAL_ADC_GetValue(&hadc1);
-    }
-    // stop the adc peripheral
-    if (HAL_ADC_Stop(&hadc1) != HAL_OK)
-    {
-      Error_Handler("error stopping adc");
-    }
+    // measure adc values
+    measure_adc(string_voltages, &vcurrentsense, &vrefa, &temp);
 
-    // calculate the analog refererence voltage from the vrefint channel
-    vrefa = __HAL_ADC_CALC_VREFANALOG_VOLTAGE(adc_values[6], ADC_RESOLUTION_12B);
-
-    // calculate the internal temperature sensor from the internal channel
-    temp = __HAL_ADC_CALC_TEMPERATURE(vrefa, adc_values[5], ADC_RESOLUTION_12B);
-
-    // convert all the adc values to voltages using the analog reference voltage
-    for (uint8_t i = 0; i < 5; i++)
-    {
-      adc_voltages[i] = __HAL_ADC_CALC_DATA_TO_VOLTAGE(vrefa, adc_values[i], ADC_RESOLUTION_12B);
-    }
-
-    // convert using the adc ratio
-    for (uint8_t i = 0; i < 4; i++)
-    {
-      string_voltages[i] = adc_voltages[i] * (15.0 * (i + 1.0)) / 3.3;
-    }
-
-    // use ! because internal pullup, dip pin pulls down to gnd
-    uint8_t dip1 = !debounce(DIP1_GPIO_Port, DIP1_Pin);
-    uint8_t dip2 = !debounce(DIP2_GPIO_Port, DIP2_Pin);
-    uint8_t dip3 = !debounce(DIP3_GPIO_Port, DIP3_Pin);
-    uint8_t dip4 = !debounce(DIP4_GPIO_Port, DIP4_Pin);
-    uint8_t dip = dip1 | (dip2 << 1) | (dip3 << 2) | (dip4 << 3);
-
-    // individual string voltages
-    uint32_t VCC2 = string_voltages[0];
-    uint32_t VCC3 = string_voltages[1] - string_voltages[0];
-    uint32_t VCC4 = string_voltages[2] - string_voltages[1];
-    uint32_t VCC5 = string_voltages[3] - string_voltages[2];
+    // read dip switch
+    uint8_t dip = read_dip();
 
     // shuffle operation
     do_shuffle(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2,
                DIS1_GPIO_Port, DIS1_Pin,
-               VCC2, VCC3, string_cell_counts[dip][0], string_cell_counts[dip][1],
+               string_voltages[0], string_voltages[1] - string_voltages[0], string_cell_counts[dip][0], string_cell_counts[dip][1],
                HAL_RCC_GetPCLK1Freq(), pwm_freq,
                &shuffle_converter1.duty_cycle.f, &shuffle_converter1.direction.f,
                Gi_VS, VoltSecMin, VoltSecMax);
@@ -505,8 +515,8 @@ int main(void)
       can_send_u32(0, dip, (temp << 16) + (vrefa & 0xffff));
       // send all read string voltages, assume string voltages aren't greater than 16 bit
       // ie, no voltage over 2^16=65535mV or 65.5V
-      can_send_u32(1, dip, (VCC2 << 16) + (VCC3 & 0xffff));
-      can_send_u32(2, dip, (VCC4 << 16) + (VCC5 & 0xffff));
+      can_send_u32(1, dip, (string_voltages[0] << 16) + ((string_voltages[1] - string_voltages[0]) & 0xffff));
+      can_send_u32(2, dip, ((string_voltages[2] - string_voltages[1]) << 16) + ((string_voltages[3] - string_voltages[2]) & 0xffff));
       // and converted shuffle duty cycles + directions
       // inlcude both the sign for direction and duty cycle
       union FloatConv dc;
