@@ -520,6 +520,8 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   uint8_t data[8] = {};
   HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &header, data);
 
+  uint8_t old_enabled = shuffling_enabled;
+
   switch (header.StdId)
   {
   case CAN_ID_CONFIG1:
@@ -538,6 +540,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     }
     shuffling_enabled = data[1];
     shuffling_mode = data[2];
+
     break;
 
   case CAN_ID_CONFIG2:
@@ -552,6 +555,14 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   default:
     // just ignore it
     return;
+  }
+
+  if (old_enabled == 1 && shuffling_enabled == 0)
+  {
+    // if the shuffling has been disabled, specifically turn things off
+    disable_timer(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2, DIS1_GPIO_Port, DIS1_Pin);
+    disable_timer(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2, DIS2_GPIO_Port, DIS2_Pin);
+    disable_timer(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, DIS3_GPIO_Port, DIS3_Pin);
   }
 }
 
@@ -654,49 +665,54 @@ int main(void)
     uint32_t VCC4_3 = VCC[2] - VCC[1];
     uint32_t VCC5_4 = VCC[3] - VCC[2];
 
-    // shuffle operation
-    if (shuffling_mode == 0)
+    // only shuffle if enabled by config
+    if (shuffling_enabled)
     {
-      do_shuffle_closed(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2,
+      if (shuffling_mode == 0)
+      {
+        // closed loop shuffling
+        do_shuffle_closed(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2,
+                          DIS1_GPIO_Port, DIS1_Pin,
+                          VCC2_1, VCC3_2, string_cell_counts[dip][0], string_cell_counts[dip][1],
+                          HAL_RCC_GetPCLK1Freq(), pwm_freq,
+                          &shuffle_converter1.duty_cycle.f, &shuffle_converter1.direction.f,
+                          volt_usec_min, volt_usec_max);
+
+        do_shuffle_closed(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2,
+                          DIS2_GPIO_Port, DIS2_Pin,
+                          VCC3_2, VCC4_3, string_cell_counts[dip][1], string_cell_counts[dip][2],
+                          HAL_RCC_GetPCLK2Freq(), pwm_freq,
+                          &shuffle_converter2.duty_cycle.f, &shuffle_converter2.direction.f,
+                          volt_usec_min, volt_usec_max);
+
+        do_shuffle_closed(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2,
+                          DIS3_GPIO_Port, DIS3_Pin,
+                          VCC4_3, VCC5_4, string_cell_counts[dip][2], string_cell_counts[dip][3],
+                          HAL_RCC_GetPCLK1Freq(), pwm_freq,
+                          &shuffle_converter3.duty_cycle.f, &shuffle_converter3.direction.f,
+                          volt_usec_min, volt_usec_max);
+      }
+      else
+      {
+        // open loop shuffling
+        do_shuffle_open(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2,
                         DIS1_GPIO_Port, DIS1_Pin,
-                        VCC2_1, VCC3_2, string_cell_counts[dip][0], string_cell_counts[dip][1],
+                        string_cell_counts[dip][0], string_cell_counts[dip][1],
                         HAL_RCC_GetPCLK1Freq(), pwm_freq,
-                        &shuffle_converter1.duty_cycle.f, &shuffle_converter1.direction.f,
-                        volt_usec_min, volt_usec_max);
+                        &shuffle_converter1.duty_cycle.f, &shuffle_converter1.direction.f);
 
-      do_shuffle_closed(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2,
+        do_shuffle_open(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2,
                         DIS2_GPIO_Port, DIS2_Pin,
-                        VCC3_2, VCC4_3, string_cell_counts[dip][1], string_cell_counts[dip][2],
+                        string_cell_counts[dip][1], string_cell_counts[dip][2],
                         HAL_RCC_GetPCLK2Freq(), pwm_freq,
-                        &shuffle_converter2.duty_cycle.f, &shuffle_converter2.direction.f,
-                        volt_usec_min, volt_usec_max);
+                        &shuffle_converter2.duty_cycle.f, &shuffle_converter2.direction.f);
 
-      do_shuffle_closed(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2,
+        do_shuffle_open(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2,
                         DIS3_GPIO_Port, DIS3_Pin,
-                        VCC4_3, VCC5_4, string_cell_counts[dip][2], string_cell_counts[dip][3],
+                        string_cell_counts[dip][2], string_cell_counts[dip][3],
                         HAL_RCC_GetPCLK1Freq(), pwm_freq,
-                        &shuffle_converter3.duty_cycle.f, &shuffle_converter3.direction.f,
-                        volt_usec_min, volt_usec_max);
-    }
-    else
-    {
-      do_shuffle_open(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2,
-                      DIS1_GPIO_Port, DIS1_Pin,
-                      string_cell_counts[dip][0], string_cell_counts[dip][1],
-                      HAL_RCC_GetPCLK1Freq(), pwm_freq,
-                      &shuffle_converter1.duty_cycle.f, &shuffle_converter1.direction.f);
-
-      do_shuffle_open(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2,
-                      DIS2_GPIO_Port, DIS2_Pin,
-                      string_cell_counts[dip][1], string_cell_counts[dip][2],
-                      HAL_RCC_GetPCLK2Freq(), pwm_freq,
-                      &shuffle_converter2.duty_cycle.f, &shuffle_converter2.direction.f);
-
-      do_shuffle_open(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2,
-                      DIS3_GPIO_Port, DIS3_Pin,
-                      string_cell_counts[dip][2], string_cell_counts[dip][3],
-                      HAL_RCC_GetPCLK1Freq(), pwm_freq,
-                      &shuffle_converter3.duty_cycle.f, &shuffle_converter3.direction.f);
+                        &shuffle_converter3.duty_cycle.f, &shuffle_converter3.direction.f);
+      }
     }
 
     // send a can packet once every update period
@@ -705,34 +721,38 @@ int main(void)
       can_last_update = HAL_GetTick();
 
       // send shuffling status
-      can_send_u16(0, dip, (shuffling_enabled << 8) + (shuffling_mode & 0xff));
+      can_send_u16(0, dip, (shuffling_enabled << 8) | (shuffling_mode & 0xff));
 
       // send mcu temp and adc vref
-      can_send_u32(1, dip, (temp << 16) + (vrefa & 0xffff));
+      can_send_u32(1, dip, (temp << 16) | (vrefa & 0xffff));
 
       // send all read string voltages, assume string voltages aren't greater than 16 bit
       // ie, no voltage over 2^16=65535mV or 65.5V
-      can_send_u32(2, dip, (VCC2_1 << 16) + (VCC3_2 & 0xffff));
-      can_send_u32(3, dip, (VCC4_3 << 16) + (VCC5_4 & 0xffff));
+      can_send_u32(2, dip, (VCC2_1 << 16) | (VCC3_2 & 0xffff));
+      can_send_u32(3, dip, (VCC4_3 << 16) | (VCC5_4 & 0xffff));
 
       // and converted shuffle duty cycles + directions
       // inlcude both the sign for direction and duty cycle
-      union FloatConv dc;
-      dc.f = shuffle_converter1.duty_cycle.f * (shuffle_converter1.direction.f == 0 ? 1 : shuffle_converter1.direction.f);
-      can_send_u32(4, dip, dc.i);
-      dc.f = shuffle_converter2.duty_cycle.f * (shuffle_converter2.direction.f == 0 ? 1 : shuffle_converter2.direction.f);
-      can_send_u32(5, dip, dc.i);
-      dc.f = shuffle_converter3.duty_cycle.f * (shuffle_converter3.direction.f == 0 ? 1 : shuffle_converter3.direction.f);
-      can_send_u32(6, dip, dc.i);
+      if (shuffling_enabled)
+      {
+        union FloatConv dc;
+        dc.f = shuffle_converter1.duty_cycle.f * (shuffle_converter1.direction.f == 0 ? 1 : shuffle_converter1.direction.f);
+        can_send_u32(4, dip, dc.i);
+        dc.f = shuffle_converter2.duty_cycle.f * (shuffle_converter2.direction.f == 0 ? 1 : shuffle_converter2.direction.f);
+        can_send_u32(5, dip, dc.i);
+        dc.f = shuffle_converter3.duty_cycle.f * (shuffle_converter3.direction.f == 0 ? 1 : shuffle_converter3.direction.f);
+        can_send_u32(6, dip, dc.i);
+      }
 
       HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
     }
   }
 }
 
-void blink3(uint32_t delay1, uint32_t delay2, uint32_t delay3)
+void blinky(uint8_t n, uint32_t delay1, uint32_t delay2, uint32_t delay3)
 {
-  for (int i = 0; i < 3; i++)
+  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+  for (uint8_t i = 0; i < n; i++)
   {
     HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
     HAL_Delay(delay1);
@@ -766,13 +786,12 @@ void Error_Handler(const char *format, ...)
   // printf("\n");
 
   /* User can add his own implementation to report the HAL error return state */
-  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
   while (1)
   {
     // blink sos
-    blink3(100, 100, 200);
-    blink3(300, 100, 200);
-    blink3(100, 100, 1000);
+    blinky(3, 100, 100, 200);
+    blinky(3, 300, 100, 200);
+    blinky(3, 100, 100, 1000);
   }
 }
 
