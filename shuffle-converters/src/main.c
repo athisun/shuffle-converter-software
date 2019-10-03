@@ -422,6 +422,7 @@ void measure_adc(uint32_t string_voltages[4], uint32_t *vcurrentsense, uint32_t 
   // convert using the adc ratio
   for (uint8_t i = 0; i < 4; i++)
   {
+    // TODO: put in resistor values
     string_voltages[i] = adc_voltages[i] * (15.0 * (i + 1.0)) / 3.3;
   }
 }
@@ -521,27 +522,32 @@ int main(void)
     // read dip switch
     uint8_t dip = read_dip();
 
+    uint32_t VCC2_1 = string_voltages[0];
+    uint32_t VCC3_2 = string_voltages[1] - string_voltages[0];
+    uint32_t VCC4_3 = string_voltages[2] - string_voltages[1];
+    uint32_t VCC5_4 = string_voltages[3] - string_voltages[2];
+
     // shuffle operation
     do_shuffle(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2,
                DIS1_GPIO_Port, DIS1_Pin,
-               string_voltages[0], string_voltages[1] - string_voltages[0], string_cell_counts[dip][0], string_cell_counts[dip][1],
+               VCC2_1, VCC3_2, string_cell_counts[dip][0], string_cell_counts[dip][1],
                HAL_RCC_GetPCLK1Freq(), pwm_freq,
                &shuffle_converter1.duty_cycle.f, &shuffle_converter1.direction.f,
                0.1, 40.0);
 
-    /*
     do_shuffle(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2,
                DIS2_GPIO_Port, DIS2_Pin,
-               VCC3, VCC4, shuffle_ratio2,
+               VCC3_2, VCC4_3, string_cell_counts[dip][1], string_cell_counts[dip][2],
                HAL_RCC_GetPCLK2Freq(), pwm_freq,
-               &shuffle_converter2_dutycycle.f);
+               &shuffle_converter2.duty_cycle.f, &shuffle_converter2.direction.f,
+               0.1, 40.0);
 
     do_shuffle(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2,
                DIS3_GPIO_Port, DIS3_Pin,
-               VCC4, VCC5, shuffle_ratio3,
+               VCC4_3, VCC5_4, string_cell_counts[dip][2], string_cell_counts[dip][3],
                HAL_RCC_GetPCLK1Freq(), pwm_freq,
-               &shuffle_converter3_dutycycle.f);
-               */
+               &shuffle_converter3.duty_cycle.f, &shuffle_converter3.direction.f,
+               0.1, 40.0);
 
     // send a can packet once every update period
     if (HAL_GetTick() - can_last_update > can_update_period)
