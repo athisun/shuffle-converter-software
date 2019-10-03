@@ -215,33 +215,24 @@ uint8_t get_timer_num(TIM_HandleTypeDef *htim)
 }
 
 // configure a timer pwm channel mode and pulse
-void pwm_configure_channel(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t mode, uint32_t pulse)
+void pwm_configure_channel(TIM_HandleTypeDef *htim, uint32_t Channel, uint32_t mode, uint32_t polarity, uint32_t pulse)
 {
   TIM_OC_InitTypeDef sConfigOC = {0};
   sConfigOC.OCMode = mode;
   sConfigOC.Pulse = pulse;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCPolarity = polarity;
+  // sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
-  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  // sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
   if (HAL_TIM_PWM_ConfigChannel(htim, &sConfigOC, Channel) != HAL_OK)
   {
     Error_Handler("error configuring timer %d channel %d pwm (mode: %ld, pulse: %ld)", get_timer_num(htim), Channel, mode, pulse);
   }
 }
 
-// starts the shuffling process on a given timer between two channels and voltage readings for those channels
-// timer channel 1, vin1 (string voltage), and cell_count1 (number of cells in string) are the low side
-// timer channel 2, vin2 (string voltage), and cell_count2 (number of cells in string) are the high side
-// timer and pwm frequency are in Hz
-// duty cycle and direction are pointers and will be modified to reflect the updated values
-void do_shuffle(TIM_HandleTypeDef *htim, const uint32_t channel1, const uint32_t channel2,
-                GPIO_TypeDef *dis_port, const uint32_t dis_pin,
-                const uint32_t vin1, const uint32_t vin2, const uint8_t cell_count1, const uint8_t cell_count2,
-                const uint32_t f_tim, const uint32_t f_pwm,
-                float *duty_cycle, float *direction,
-                const uint32_t Gi_VS, const uint32_t VoltSecMin, const uint32_t VoltSecMax)
+void disable_timer(TIM_HandleTypeDef *htim, const uint32_t channel1, const uint32_t channel2,
+                   GPIO_TypeDef *dis_port, const uint32_t dis_pin)
 {
   // disable gate driver
   HAL_GPIO_WritePin(dis_port, dis_pin, GPIO_PIN_SET);
@@ -257,10 +248,24 @@ void do_shuffle(TIM_HandleTypeDef *htim, const uint32_t channel1, const uint32_t
     uint8_t timernum = get_timer_num(htim);
     Error_Handler("error stopping timer %d channel %d", timernum, channel2);
   }
+}
 
+// starts the shuffling process on a given timer between two channels and voltage readings for those channels
+// timer channel 1, vin1 (string voltage), and cell_count1 (number of cells in string) are the low side
+// timer channel 2, vin2 (string voltage), and cell_count2 (number of cells in string) are the high side
+// timer and pwm frequency are in Hz
+// duty cycle and direction are pointers and will be modified to reflect the updated values
+void do_shuffle(TIM_HandleTypeDef *htim, const uint32_t channel1, const uint32_t channel2,
+                GPIO_TypeDef *dis_port, const uint32_t dis_pin,
+                const uint32_t vin1, const uint32_t vin2, const uint8_t cell_count1, const uint8_t cell_count2,
+                const uint32_t f_tim, const uint32_t f_pwm,
+                float *duty_cycle, float *direction,
+                const float volt_usec_min, const float volt_usec_max)
+{
   // if no shuffling to be performed on this input, return after timers and gate drivers are disabled/off
   if (cell_count1 == 0 || cell_count2 == 0)
   {
+    disable_timer(htim, channel1, channel2, dis_port, dis_pin);
     return;
   }
 
@@ -269,16 +274,23 @@ void do_shuffle(TIM_HandleTypeDef *htim, const uint32_t channel1, const uint32_t
   float vin2_norm = vin2 / (float)cell_count2;
 
   // normalise the cell voltages and calculate the error
-  volatile float err = vin1_norm - vin2_norm;
+  float err = vin2_norm - vin1_norm;
 
   // adjust the duty cycle based on the gain and error
-  float D = (*duty_cycle) + 0.005 * err;
+  float D = (*duty_cycle) * (*direction) + 0.00001 * err;
 
   // limits: -duty_max <= duty cycle <= duty_max
-  D = fmaxf(fminf(D, 0.45), -0.45);
+  if (D < -0.45)
+  {
+    D = -0.45;
+  }
+  else if (D > 0.45)
+  {
+    D = 0.45;
+  }
 
   // copy the sign from the duty cycle to store direction of switching
-  *direction = copysign(1.0, D);
+  *direction = copysignf(1.0, D);
 
   // copy the absolute value from the duty cycle and store
   *duty_cycle = fabsf(D);
@@ -302,6 +314,30 @@ void do_shuffle(TIM_HandleTypeDef *htim, const uint32_t channel1, const uint32_t
     arr = (f_tim / (psc + 1)) / f_pwm;
   }
 
+  // calculate counter reload register value (pulse count)
+  uint32_t ccrx = ((*duty_cycle) * (arr + 1)) - 1;
+
+  // calculate inductor properties to determine timings
+  float period = (1 / (float)f_tim);
+  float period_us = period * pow(10, 6);
+
+  float on_time_us = period_us * ccrx;
+
+  if (on_time_us < volt_usec_min)
+  {
+    // don't shuffle
+    disable_timer(htim, channel1, channel2, dis_port, dis_pin);
+    return;
+  }
+  else if (on_time_us > volt_usec_max)
+  {
+    ccrx = period_us / volt_usec_max;
+  }
+
+  // stop timer before setting stuff
+  // dont think this is necessary
+  // disable_timer(htim, channel1, channel2, dis_port, dis_pin);
+
   // reinititialise timer with new prescaler and period value
   htim->Init.Prescaler = psc;
   htim->Init.Period = arr;
@@ -311,21 +347,18 @@ void do_shuffle(TIM_HandleTypeDef *htim, const uint32_t channel1, const uint32_t
     Error_Handler("error initialising timer %d pwm (psc: %ld, arr: %ld)", timernum, psc, arr);
   }
 
-  // calculate counter reload register value (pulse count)
-  uint32_t ccrx = ((*duty_cycle) * (arr + 1)) - 1;
-
   // configure each timer pwm mode and pulse
-  if (direction > 0)
+  if (*direction > 0)
   {
     // if the direction is positive (up the string), switch the bottom gate first
-    pwm_configure_channel(htim, channel1, TIM_OCMODE_PWM1, ccrx);
-    pwm_configure_channel(htim, channel2, TIM_OCMODE_PWM2, arr - ccrx);
+    pwm_configure_channel(htim, channel1, TIM_OCMODE_PWM1, TIM_OCPOLARITY_HIGH, ccrx);
+    pwm_configure_channel(htim, channel2, TIM_OCMODE_PWM2, TIM_OCPOLARITY_HIGH, arr - ccrx);
   }
   else
   {
     // if the direction is negative (down the string), switch the top gate first
-    pwm_configure_channel(htim, channel1, TIM_OCMODE_PWM2, ccrx);
-    pwm_configure_channel(htim, channel2, TIM_OCMODE_PWM1, arr - ccrx);
+    pwm_configure_channel(htim, channel1, TIM_OCMODE_PWM1, TIM_OCPOLARITY_LOW, arr - ccrx);
+    pwm_configure_channel(htim, channel2, TIM_OCMODE_PWM2, TIM_OCPOLARITY_LOW, ccrx);
   }
 
   // start pwm timers
@@ -341,7 +374,7 @@ void do_shuffle(TIM_HandleTypeDef *htim, const uint32_t channel1, const uint32_t
   }
 
   // enable gate driver
-  HAL_GPIO_WritePin(dis_port, dis_pin, GPIO_PIN_RESET);
+  // HAL_GPIO_WritePin(dis_port, dis_pin, GPIO_PIN_RESET);
 }
 
 // measure adc values
@@ -469,11 +502,15 @@ int main(void)
   const uint32_t pwm_freq = 50000;
 
   // shuffle constants
-  const uint32_t iteration_period = 10;                            // 10 ms
+  /*
   const uint32_t Gi_VS = 1000;                                     // (mV) VoltSec integral Gain per second.
   const uint32_t Gi_VS2 = Gi_VS * (1 / (float)pwm_freq) / 1000000; // unused?
   const uint32_t VoltSecMin = 100;                                 // mV.us = 0.1 V.us = 10mA i_pk for L=10uH
   const uint32_t VoltSecMax = 40000;                               // mV.us = 40 V.us = 4A i_pk for L=10uH
+  */
+
+  // sleep delay in ms between loops
+  const uint32_t iteration_period = 10; // 10 ms
 
   /* Infinite loop */
   while (1)
@@ -490,7 +527,7 @@ int main(void)
                string_voltages[0], string_voltages[1] - string_voltages[0], string_cell_counts[dip][0], string_cell_counts[dip][1],
                HAL_RCC_GetPCLK1Freq(), pwm_freq,
                &shuffle_converter1.duty_cycle.f, &shuffle_converter1.direction.f,
-               Gi_VS, VoltSecMin, VoltSecMax);
+               0.1, 40.0);
 
     /*
     do_shuffle(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2,
