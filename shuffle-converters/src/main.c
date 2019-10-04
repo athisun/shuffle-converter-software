@@ -47,7 +47,7 @@ union FloatConv {
 #define CAN_ID_BASE 0x400
 #define CAN_ID_CONFIG1 0x480
 #define CAN_ID_CONFIG2 0x481
-#define CAN_ID_ERROR (0x489 - CAN_ID_BASE)
+#define CAN_ID_ERROR 0x89
 
 /* Private macro -------------------------------------------------------------*/
 
@@ -67,12 +67,18 @@ const uint8_t string_cell_counts[10][4] = {
     {12, 14, 14, 14}, // 9, J = 3
 };
 
+const float adc_ratios[4] = {
+    1.0 + 220.0 / 62.0,
+    1.0 + 1300.0 / 160.0,
+    1.0 + 1500.0 / 120.0,
+    1.0 + 1300.0 / 75.0};
+
 // sleep delay in ms between loops
 const uint32_t iteration_period = 10; // 10 ms
 // can update period in ms
 const uint32_t can_update_period = 1000;
 // pwm frequency (Hz)
-const uint32_t pwm_freq = 50000;
+const uint32_t pwm_freq = 100000;
 // inductor params for limits
 const float volt_usec_min = 0.1;
 const float volt_usec_max = 40;
@@ -498,7 +504,7 @@ void measure_adc(uint32_t string_voltages[4], uint32_t *vcurrentsense, uint32_t 
   for (uint8_t i = 0; i < 4; i++)
   {
     // TODO: put in resistor values
-    string_voltages[i] = adc_voltages[i] * (15.0 * (i + 1.0)) / 3.3;
+    string_voltages[i] = adc_voltages[i] * adc_ratios[i]; // (15.0 * (i + 1.0)) / 3.3;
   }
 }
 
