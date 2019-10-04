@@ -21,6 +21,7 @@
 #include "main.h"
 #include "adc.h"
 #include "can.h"
+#include "iwdg.h"
 #include "tim.h"
 #include "gpio.h"
 
@@ -411,7 +412,7 @@ void do_shuffle_closed(TIM_HandleTypeDef *htim, const uint32_t channel1, const u
   float err = vin2_norm - vin1_norm;
 
   // adjust the duty cycle based on the gain and error
-  float D = (*duty_cycle) * (*direction) + 0.00001 * err;
+  float D = (*duty_cycle) * (*direction) + 0.001 * err;
 
   // limits: -duty_max <= duty cycle <= duty_max
   if (D < -duty_max)
@@ -598,6 +599,7 @@ int main(void)
   MX_TIM1_Init();
   MX_TIM2_Init();
   MX_TIM15_Init();
+  MX_IWDG_Init();
 
   // perform an automatic ADC calibration to improve the conversion accuracy
   // has to be done before the adc is started
@@ -658,6 +660,10 @@ int main(void)
   /* Infinite loop */
   while (1)
   {
+    // referesh the watchdog every loop
+    HAL_IWDG_Refresh(&hiwdg);
+
+    // sleep for the configured iteration period
     HAL_Delay(iteration_period);
 
     // measure adc values
