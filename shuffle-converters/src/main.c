@@ -124,7 +124,7 @@ int32_t can_send(uint16_t id, uint8_t len, uint8_t data[])
   }
 
   CAN_TxHeaderTypeDef header;
-  header.ExtId = (CAN_ID_BASE + id);
+  header.StdId = (CAN_ID_BASE + id);
   header.IDE = CAN_ID_STD;   // standard id
   header.RTR = CAN_RTR_DATA; // data frame
   header.DLC = len;          // size of data in bytes
