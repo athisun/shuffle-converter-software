@@ -592,6 +592,20 @@ int main(void)
   /* Configure the system clock */
   SystemClock_Config();
 
+  /*
+  // grab the reset flags
+  volatile const uint8_t rst_bor = __HAL_RCC_GET_FLAG(RCC_FLAG_BORRST);
+  volatile const uint8_t rst_obl = __HAL_RCC_GET_FLAG(RCC_FLAG_OBLRST);
+  volatile const uint8_t rst_pin = __HAL_RCC_GET_FLAG(RCC_FLAG_PINRST);
+  volatile const uint8_t rst_fwr = __HAL_RCC_GET_FLAG(RCC_FLAG_FWRST);
+  volatile const uint8_t rst_sft = __HAL_RCC_GET_FLAG(RCC_FLAG_SFTRST);
+  volatile const uint8_t rst_iwdg = __HAL_RCC_GET_FLAG(RCC_FLAG_IWDGRST);
+  volatile const uint8_t rst_wwdg = __HAL_RCC_GET_FLAG(RCC_FLAG_WWDGRST);
+  volatile const uint8_t rst_lpwr = __HAL_RCC_GET_FLAG(RCC_FLAG_LPWRRST);
+
+  __HAL_RCC_CLEAR_RESET_FLAGS();
+  */
+
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_ADC1_Init();
