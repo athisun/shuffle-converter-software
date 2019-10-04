@@ -821,13 +821,18 @@ void Error_Handler(const char *format, ...)
   // printf("\n");
 
   /* User can add his own implementation to report the HAL error return state */
-  while (1)
+
+  // blink sos a few times
+  for (uint8_t i = 0; i < 5; i++)
   {
     // blink sos
     blinky(3, 100, 100, 200);
     blinky(3, 300, 100, 200);
     blinky(3, 100, 100, 1000);
   }
+
+  // then reset
+  HAL_NVIC_SystemReset();
 }
 
 #ifdef USE_FULL_ASSERT
