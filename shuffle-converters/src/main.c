@@ -46,9 +46,9 @@ union FloatConv {
 
 // id for can messages
 #define CAN_ID_BASE 0x400
-#define CAN_ID_CONFIG1 0x480
-#define CAN_ID_CONFIG2 0x481
-#define CAN_ID_ERROR 0x89
+#define CAN_ID_CONFIG1 0x410
+#define CAN_ID_CONFIG2 0x411
+#define CAN_ID_ERROR 0x20
 
 /* Private macro -------------------------------------------------------------*/
 
@@ -698,15 +698,15 @@ int main(void)
       can_last_update = HAL_GetTick();
 
       // send shuffling status
-      can_send_u16(0, dip, (shuffling_enabled << 8) | (shuffling_mode & 0xff));
+      can_send_u16(0x0, dip, (shuffling_enabled << 8) | (shuffling_mode & 0xff));
 
       // send mcu temp and adc vref
-      can_send_u32(1, dip, (temp << 16) | (vrefa & 0xffff));
+      can_send_u32(0x1, dip, (temp << 16) | (vrefa & 0xffff));
 
       // send all read string voltages, assume string voltages aren't greater than 16 bit
       // ie, no voltage over 2^16=65535mV or 65.5V
-      can_send_u32(2, dip, (VCC2_1 << 16) | (VCC3_2 & 0xffff));
-      can_send_u32(3, dip, (VCC4_3 << 16) | (VCC5_4 & 0xffff));
+      can_send_u32(0x2, dip, (VCC2_1 << 16) | (VCC3_2 & 0xffff));
+      can_send_u32(0x3, dip, (VCC4_3 << 16) | (VCC5_4 & 0xffff));
 
       // and converted shuffle duty cycles + directions
       // inlcude both the sign for direction and duty cycle
@@ -714,11 +714,11 @@ int main(void)
       {
         union FloatConv dc;
         dc.f = shuffle_converter1.duty_cycle.f * (shuffle_converter1.direction.f == 0 ? 1 : shuffle_converter1.direction.f);
-        can_send_u32(4, dip, dc.i);
+        can_send_u32(0x4, dip, dc.i);
         dc.f = shuffle_converter2.duty_cycle.f * (shuffle_converter2.direction.f == 0 ? 1 : shuffle_converter2.direction.f);
-        can_send_u32(5, dip, dc.i);
+        can_send_u32(0x5, dip, dc.i);
         dc.f = shuffle_converter3.duty_cycle.f * (shuffle_converter3.direction.f == 0 ? 1 : shuffle_converter3.direction.f);
-        can_send_u32(6, dip, dc.i);
+        can_send_u32(0x6, dip, dc.i);
       }
 
       HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
