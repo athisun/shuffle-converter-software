@@ -672,60 +672,11 @@ int main(void)
     // read dip switch
     uint8_t dip = read_dip();
 
+    // convert the cumulative string voltages to individual string voltages
     uint32_t VCC2_1 = VCC[0];
     uint32_t VCC3_2 = VCC[1] - VCC[0];
     uint32_t VCC4_3 = VCC[2] - VCC[1];
     uint32_t VCC5_4 = VCC[3] - VCC[2];
-
-    // only shuffle if enabled by config
-    if (shuffling_enabled)
-    {
-      if (shuffling_mode == 0)
-      {
-        // closed loop shuffling
-        do_shuffle_closed(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2,
-                          DIS1_GPIO_Port, DIS1_Pin,
-                          VCC2_1, VCC3_2, string_cell_counts[dip][0], string_cell_counts[dip][1],
-                          HAL_RCC_GetPCLK1Freq(), pwm_freq,
-                          &shuffle_converter1.duty_cycle.f, &shuffle_converter1.direction.f,
-                          volt_usec_min, volt_usec_max);
-
-        do_shuffle_closed(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2,
-                          DIS2_GPIO_Port, DIS2_Pin,
-                          VCC3_2, VCC4_3, string_cell_counts[dip][1], string_cell_counts[dip][2],
-                          HAL_RCC_GetPCLK2Freq(), pwm_freq,
-                          &shuffle_converter2.duty_cycle.f, &shuffle_converter2.direction.f,
-                          volt_usec_min, volt_usec_max);
-
-        do_shuffle_closed(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2,
-                          DIS3_GPIO_Port, DIS3_Pin,
-                          VCC4_3, VCC5_4, string_cell_counts[dip][2], string_cell_counts[dip][3],
-                          HAL_RCC_GetPCLK1Freq(), pwm_freq,
-                          &shuffle_converter3.duty_cycle.f, &shuffle_converter3.direction.f,
-                          volt_usec_min, volt_usec_max);
-      }
-      else
-      {
-        // open loop shuffling
-        do_shuffle_open(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2,
-                        DIS1_GPIO_Port, DIS1_Pin,
-                        string_cell_counts[dip][0], string_cell_counts[dip][1],
-                        HAL_RCC_GetPCLK1Freq(), pwm_freq,
-                        &shuffle_converter1.duty_cycle.f, &shuffle_converter1.direction.f);
-
-        do_shuffle_open(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2,
-                        DIS2_GPIO_Port, DIS2_Pin,
-                        string_cell_counts[dip][1], string_cell_counts[dip][2],
-                        HAL_RCC_GetPCLK2Freq(), pwm_freq,
-                        &shuffle_converter2.duty_cycle.f, &shuffle_converter2.direction.f);
-
-        do_shuffle_open(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2,
-                        DIS3_GPIO_Port, DIS3_Pin,
-                        string_cell_counts[dip][2], string_cell_counts[dip][3],
-                        HAL_RCC_GetPCLK1Freq(), pwm_freq,
-                        &shuffle_converter3.duty_cycle.f, &shuffle_converter3.direction.f);
-      }
-    }
 
     // send a can packet once every update period
     if (HAL_GetTick() - can_last_update > can_update_period)
@@ -757,6 +708,64 @@ int main(void)
       }
 
       HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+    }
+
+    // only shuffle if enabled by config
+    if (shuffling_enabled == 0)
+    {
+      continue;
+    }
+
+    switch (shuffling_mode)
+    {
+    case 0:
+      // closed loop shuffling
+      do_shuffle_closed(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2,
+                        DIS1_GPIO_Port, DIS1_Pin,
+                        VCC2_1, VCC3_2, string_cell_counts[dip][0], string_cell_counts[dip][1],
+                        HAL_RCC_GetPCLK1Freq(), pwm_freq,
+                        &shuffle_converter1.duty_cycle.f, &shuffle_converter1.direction.f,
+                        volt_usec_min, volt_usec_max);
+
+      do_shuffle_closed(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2,
+                        DIS2_GPIO_Port, DIS2_Pin,
+                        VCC3_2, VCC4_3, string_cell_counts[dip][1], string_cell_counts[dip][2],
+                        HAL_RCC_GetPCLK2Freq(), pwm_freq,
+                        &shuffle_converter2.duty_cycle.f, &shuffle_converter2.direction.f,
+                        volt_usec_min, volt_usec_max);
+
+      do_shuffle_closed(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2,
+                        DIS3_GPIO_Port, DIS3_Pin,
+                        VCC4_3, VCC5_4, string_cell_counts[dip][2], string_cell_counts[dip][3],
+                        HAL_RCC_GetPCLK1Freq(), pwm_freq,
+                        &shuffle_converter3.duty_cycle.f, &shuffle_converter3.direction.f,
+                        volt_usec_min, volt_usec_max);
+      break;
+
+    case 1:
+      // open loop shuffling
+      do_shuffle_open(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2,
+                      DIS1_GPIO_Port, DIS1_Pin,
+                      string_cell_counts[dip][0], string_cell_counts[dip][1],
+                      HAL_RCC_GetPCLK1Freq(), pwm_freq,
+                      &shuffle_converter1.duty_cycle.f, &shuffle_converter1.direction.f);
+
+      do_shuffle_open(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2,
+                      DIS2_GPIO_Port, DIS2_Pin,
+                      string_cell_counts[dip][1], string_cell_counts[dip][2],
+                      HAL_RCC_GetPCLK2Freq(), pwm_freq,
+                      &shuffle_converter2.duty_cycle.f, &shuffle_converter2.direction.f);
+
+      do_shuffle_open(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2,
+                      DIS3_GPIO_Port, DIS3_Pin,
+                      string_cell_counts[dip][2], string_cell_counts[dip][3],
+                      HAL_RCC_GetPCLK1Freq(), pwm_freq,
+                      &shuffle_converter3.duty_cycle.f, &shuffle_converter3.direction.f);
+      break;
+
+    default:
+      Error_Handler("unknown shuffle mode: %d", shuffling_mode);
+      break;
     }
   }
 }
