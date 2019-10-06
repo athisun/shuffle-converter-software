@@ -48,9 +48,9 @@ union FloatConv {
 
 // id for can messages
 #define CAN_ID_BASE 0x600
-#define CAN_ID_CONFIG1 0x610
-#define CAN_ID_CONFIG2 0x611
-#define CAN_ID_ERROR 0x20
+#define CAN_ID_CONFIG1 0x620
+#define CAN_ID_CONFIG2 0x621
+#define CAN_ID_ERROR 0x30
 
 /* Private macro -------------------------------------------------------------*/
 
@@ -171,51 +171,43 @@ int32_t can_send(uint16_t id, uint8_t len, uint8_t data[])
 }
 
 // send a single byte can message
-int8_t can_send_id(uint8_t id, uint8_t dip)
+int8_t can_send_byte(uint8_t dip, uint8_t byte)
 {
-  return can_send(id, 1, &dip);
+  return can_send(dip, 1, &byte);
 }
 
 // send a two byte can message
-// first byte is the dip switch configuration
-// data byte is the dip switch configuration
-int8_t can_send_u8(uint8_t id, uint8_t dip, uint8_t data)
+int8_t can_send_u8(uint8_t dip, uint8_t id, uint8_t data)
 {
-  uint8_t b[2] = {dip, data};
-  return can_send(id, sizeof(b), b);
+  uint8_t b[2] = {id, data};
+  return can_send(dip, sizeof(b), b);
 }
 
 // send a three byte can message
-// first byte is the dip switch configuration
-// second two are the u16 data
-int8_t can_send_u16(uint8_t id, uint8_t dip, uint16_t data)
+int8_t can_send_u16(uint8_t dip, uint8_t id, uint16_t data)
 {
-  uint8_t b[3] = {dip};
+  uint8_t b[3] = {id};
   b[1] = (data >> 8) & 0xff;
   b[2] = data & 0xff;
-  return can_send(id, sizeof(b), b);
+  return can_send(dip, sizeof(b), b);
 }
 
 // send a five byte can message
-// first byte is the dip switch configuration
-// next four are the u32 data
-int8_t can_send_u32(uint8_t id, uint8_t dip, uint32_t data)
+int8_t can_send_u32(uint8_t dip, uint8_t id, uint32_t data)
 {
-  uint8_t b[5] = {dip};
+  uint8_t b[5] = {id};
   b[1] = (data >> 24) & 0xff;
   b[2] = (data >> 16) & 0xff;
   b[3] = (data >> 8) & 0xff;
   b[4] = data & 0xff;
-  return can_send(id, sizeof(b), b);
+  return can_send(dip, sizeof(b), b);
 }
 
 // send an eight byte can message
-// first byte is the dip switch configuration
-// next 7 are the u64 data
 // NOTE: top byte is essentially masked from u64 data (ie, not included)
-int8_t can_send_u64(uint8_t id, uint8_t dip, uint64_t data)
+int8_t can_send_u64(uint8_t dip, uint8_t id, uint64_t data)
 {
-  uint8_t b[8] = {dip};
+  uint8_t b[8] = {id};
   b[1] = (data >> 48) & 0xff;
   b[2] = (data >> 40) & 0xff;
   b[3] = (data >> 32) & 0xff;
@@ -223,7 +215,7 @@ int8_t can_send_u64(uint8_t id, uint8_t dip, uint64_t data)
   b[5] = (data >> 16) & 0xff;
   b[6] = (data >> 8) & 0xff;
   b[7] = data & 0xff;
-  return can_send(id, sizeof(b), b);
+  return can_send(dip, sizeof(b), b);
 }
 
 // returns the timer number from the pointer based on the instance
@@ -710,15 +702,15 @@ int main(void)
       can_last_update = HAL_GetTick();
 
       // send shuffling status
-      can_send_u16(0x0, dip, (shuffling_enabled << 8) | (shuffling_mode & 0xff));
+      can_send_u16(dip, 0x0, (shuffling_enabled << 8) | (shuffling_mode & 0xff));
 
       // send mcu temp and adc vref
-      can_send_u32(0x1, dip, (temp << 16) | (vrefa & 0xffff));
+      can_send_u32(dip, 0x1, (temp << 16) | (vrefa & 0xffff));
 
       // send all read string voltages, assume string voltages aren't greater than 16 bit
       // ie, no voltage over 2^16=65535mV or 65.5V
-      can_send_u32(0x2, dip, (VCC2_1 << 16) | (VCC3_2 & 0xffff));
-      can_send_u32(0x3, dip, (VCC4_3 << 16) | (VCC5_4 & 0xffff));
+      can_send_u32(dip, 0x2, (VCC2_1 << 16) | (VCC3_2 & 0xffff));
+      can_send_u32(dip, 0x3, (VCC4_3 << 16) | (VCC5_4 & 0xffff));
 
       // and converted shuffle duty cycles + directions
       // inlcude both the sign for direction and duty cycle
@@ -726,11 +718,11 @@ int main(void)
       {
         union FloatConv dc;
         dc.f = shuffle_converter1.duty_cycle.f * (shuffle_converter1.direction.f == 0 ? 1 : shuffle_converter1.direction.f);
-        can_send_u32(0x4, dip, dc.i);
+        can_send_u32(dip, 0x4, dc.i);
         dc.f = shuffle_converter2.duty_cycle.f * (shuffle_converter2.direction.f == 0 ? 1 : shuffle_converter2.direction.f);
-        can_send_u32(0x5, dip, dc.i);
+        can_send_u32(dip, 0x5, dc.i);
         dc.f = shuffle_converter3.duty_cycle.f * (shuffle_converter3.direction.f == 0 ? 1 : shuffle_converter3.direction.f);
-        can_send_u32(0x6, dip, dc.i);
+        can_send_u32(dip, 0x6, dc.i);
       }
 
       HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
@@ -824,7 +816,7 @@ void Error_Handler(const char *format, ...)
   disable_timer(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, DIS3_GPIO_Port, DIS3_Pin);
 
   // send error to can bus
-  can_send_id(CAN_ID_ERROR, read_dip());
+  can_send_byte(CAN_ID_ERROR + read_dip(), 0);
 
   /*
   va_list args;
