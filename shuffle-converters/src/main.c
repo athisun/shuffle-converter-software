@@ -47,9 +47,9 @@ union FloatConv {
 /* Private define ------------------------------------------------------------*/
 
 // id for can messages
-#define CAN_ID_BASE 0x400
-#define CAN_ID_CONFIG1 0x410
-#define CAN_ID_CONFIG2 0x411
+#define CAN_ID_BASE 0x600
+#define CAN_ID_CONFIG1 0x610
+#define CAN_ID_CONFIG2 0x611
 #define CAN_ID_ERROR 0x20
 
 /* Private macro -------------------------------------------------------------*/
