@@ -126,7 +126,7 @@ int32_t can_send(uint8_t dip, uint8_t id, uint8_t len, uint8_t data[])
   // dont send message if broadcast enabled
   if (can_broadcast_enabled == 0)
   {
-    return;
+    return -1;
   }
 
   // limit message data length to 8
@@ -530,9 +530,8 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 
   uint8_t old_enabled = shuffling_enabled;
 
-  switch (header.StdId)
+  if (header.StdId == CAN_ID_CONFIG1)
   {
-  case CAN_ID_CONFIG1:
     // byte 0 = dip
     // byte 1 = enable
     // byte 2 = mode
@@ -546,15 +545,14 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     shuffling_enabled = data[1];
     shuffling_mode = data[2];
     can_broadcast_enabled = data[3];
-
-    break;
-
-  case CAN_ID_CONFIG2:
+  }
+  else if (header.StdId == CAN_ID_CONFIG2)
+  {
     // byte 0 = enable
     shuffling_enabled = data[0];
-    break;
-
-  default:
+  }
+  else
+  {
     // just ignore it
     return;
   }
