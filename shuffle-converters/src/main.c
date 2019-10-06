@@ -34,6 +34,8 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+#include "stm32l4xx_ll_tim.h"
+
 /* Private typedef -----------------------------------------------------------*/
 
 // union type for converting floats to integers
@@ -55,7 +57,7 @@ union FloatConv {
 /* Private variables ---------------------------------------------------------*/
 
 // store the counts of the string cells
-const uint8_t string_cell_counts[10][4] = {
+const uint8_t string_cell_counts[16][4] = {
     {6, 5, 10, 12},   // 0, A = 3
     {12, 10, 10},     // 1, B = 2
     {10, 10, 10, 10}, // 2, C = 3
@@ -87,9 +89,11 @@ const float volt_usec_max = 40;
 const float duty_max = 0.45;
 
 // whether shuffling is actually enabled
-volatile uint8_t shuffling_enabled = 0;
-// which mode to shuffle in (0 = DCM, 1 = CCM)
-volatile uint8_t shuffling_mode = 0;
+volatile uint8_t shuffling_enabled = 1;
+// which mode to shuffle in
+// 0 = closed loop, dcm
+// 1 = open loop, ccm
+volatile uint8_t shuffling_mode = 1;
 
 /* Private function prototypes -----------------------------------------------*/
 
@@ -285,6 +289,8 @@ void calc_timer(uint32_t f_tim, uint32_t f_pwm, float dc, uint32_t *psc, uint32_
   // TODO: error if the resolution is too low? whats too low?
   // float res = 1.0*f_tim/f_pwm;
 
+  // TODO: use __LL_TIM_CALC_ARR and __LL_TIM_CALC_PULSE
+
   // start with a prescaler value of 0
   *psc = 0;
   // calculate the autoreload register
@@ -305,6 +311,7 @@ void calc_timer(uint32_t f_tim, uint32_t f_pwm, float dc, uint32_t *psc, uint32_
 void start_shuffling(TIM_HandleTypeDef *htim, const uint32_t channel1, const uint32_t channel2,
                      GPIO_TypeDef *dis_port, const uint32_t dis_pin,
                      uint32_t psc, uint32_t arr, uint32_t ccrx,
+                     uint32_t pulse1, uint32_t pulse2,
                      float direction)
 {
 
@@ -321,14 +328,14 @@ void start_shuffling(TIM_HandleTypeDef *htim, const uint32_t channel1, const uin
   if (direction > 0)
   {
     // if the direction is positive (up the string), switch the bottom gate first
-    pwm_configure_channel(htim, channel1, TIM_OCMODE_PWM1, TIM_OCPOLARITY_HIGH, ccrx);
-    pwm_configure_channel(htim, channel2, TIM_OCMODE_PWM2, TIM_OCPOLARITY_HIGH, arr - ccrx);
+    pwm_configure_channel(htim, channel1, TIM_OCMODE_PWM1, TIM_OCPOLARITY_HIGH, pulse1);
+    pwm_configure_channel(htim, channel2, TIM_OCMODE_PWM2, TIM_OCPOLARITY_HIGH, pulse2);
   }
   else
   {
     // if the direction is negative (down the string), switch the top gate first
-    pwm_configure_channel(htim, channel1, TIM_OCMODE_PWM1, TIM_OCPOLARITY_LOW, arr - ccrx);
-    pwm_configure_channel(htim, channel2, TIM_OCMODE_PWM2, TIM_OCPOLARITY_LOW, ccrx);
+    pwm_configure_channel(htim, channel1, TIM_OCMODE_PWM1, TIM_OCPOLARITY_LOW, pulse2);
+    pwm_configure_channel(htim, channel2, TIM_OCMODE_PWM2, TIM_OCPOLARITY_LOW, pulse1);
   }
 
   // start pwm timers
@@ -365,12 +372,12 @@ void do_shuffle_open(TIM_HandleTypeDef *htim, const uint32_t channel1, const uin
   if (cell_count1 < cell_count2)
   {
     *direction = -1;
-    *duty_cycle = (*direction) * cell_count2 / (cell_count1 + cell_count2);
+    *duty_cycle = cell_count2 / (float)(cell_count1 + cell_count2);
   }
   else
   {
     *direction = 1;
-    *duty_cycle = (*direction) * cell_count2 / (cell_count1 + cell_count2);
+    *duty_cycle = cell_count1 / (float)(cell_count1 + cell_count2);
   }
 
   // calculate timer parameters
@@ -381,6 +388,7 @@ void do_shuffle_open(TIM_HandleTypeDef *htim, const uint32_t channel1, const uin
   start_shuffling(htim, channel1, channel2,
                   dis_port, dis_pin,
                   psc, arr, ccrx,
+                  ccrx, ccrx + 3, // + 1 for dead time
                   *direction);
 }
 
@@ -456,6 +464,7 @@ void do_shuffle_closed(TIM_HandleTypeDef *htim, const uint32_t channel1, const u
   start_shuffling(htim, channel1, channel2,
                   dis_port, dis_pin,
                   psc, arr, ccrx,
+                  arr, arr - ccrx,
                   *direction);
 }
 
@@ -614,6 +623,9 @@ int main(void)
   MX_TIM2_Init();
   MX_TIM15_Init();
   MX_IWDG_Init();
+
+  // investigating timer dead time
+  // volatile uint8_t dt = __LL_TIM_CALC_DEADTIME(32000000, LL_TIM_GetClockDivision(htim1.Instance), 120);
 
   // perform an automatic ADC calibration to improve the conversion accuracy
   // has to be done before the adc is started
@@ -790,10 +802,13 @@ void blinky(uint8_t n, uint32_t delay1, uint32_t delay2, uint32_t delay3)
   for (uint8_t i = 0; i < n; i++)
   {
     HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+    HAL_IWDG_Refresh(&hiwdg);
     HAL_Delay(delay1);
     HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+    HAL_IWDG_Refresh(&hiwdg);
     HAL_Delay(delay2);
   }
+  HAL_IWDG_Refresh(&hiwdg);
   HAL_Delay(delay3);
 }
 
@@ -803,7 +818,6 @@ void blinky(uint8_t n, uint32_t delay1, uint32_t delay2, uint32_t delay3)
   */
 void Error_Handler(const char *format, ...)
 {
-
   // disable all the gate drivers, in an attempt to set to a "safe" state
   disable_timer(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2, DIS1_GPIO_Port, DIS1_Pin);
   disable_timer(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2, DIS2_GPIO_Port, DIS2_Pin);
