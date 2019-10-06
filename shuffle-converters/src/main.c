@@ -48,9 +48,8 @@ union FloatConv {
 
 // id for can messages
 #define CAN_ID_BASE 0x600
-#define CAN_ID_CONFIG1 0x620
-#define CAN_ID_CONFIG2 0x621
-#define CAN_ID_ERROR 0x30
+#define CAN_ID_CONFIG1 0x6FD
+#define CAN_ID_CONFIG2 0x6FE
 
 /* Private macro -------------------------------------------------------------*/
 
@@ -95,6 +94,9 @@ volatile uint8_t shuffling_enabled = 1;
 // 1 = open loop, ccm
 volatile uint8_t shuffling_mode = 1;
 
+// can broadcast enabled
+volatile uint8_t can_broadcast_enabled = 0;
+
 /* Private function prototypes -----------------------------------------------*/
 
 #ifdef DEBUG
@@ -119,8 +121,14 @@ uint8_t debounce(GPIO_TypeDef *port, uint16_t pin)
 
 // sends a can message with given id, length and data
 // returns the tx mailbox id on success, -1 on failure
-int32_t can_send(uint16_t id, uint8_t len, uint8_t data[])
+int32_t can_send(uint8_t dip, uint8_t id, uint8_t len, uint8_t data[])
 {
+  // dont send message if broadcast enabled
+  if (can_broadcast_enabled == 0)
+  {
+    return;
+  }
+
   // limit message data length to 8
   if (len > 8)
   {
@@ -128,7 +136,7 @@ int32_t can_send(uint16_t id, uint8_t len, uint8_t data[])
   }
 
   CAN_TxHeaderTypeDef header;
-  header.StdId = (CAN_ID_BASE + id);
+  header.StdId = CAN_ID_BASE + (dip * 10) + id;
   header.IDE = CAN_ID_STD;   // standard id
   header.RTR = CAN_RTR_DATA; // data frame
   header.DLC = len;          // size of data in bytes
@@ -171,51 +179,43 @@ int32_t can_send(uint16_t id, uint8_t len, uint8_t data[])
 }
 
 // send a single byte can message
-int8_t can_send_byte(uint8_t dip, uint8_t byte)
+int8_t can_send_u8(uint8_t dip, uint8_t id, uint8_t data)
 {
-  return can_send(dip, 1, &byte);
+  return can_send(dip, id, 1, &data);
 }
 
 // send a two byte can message
-int8_t can_send_u8(uint8_t dip, uint8_t id, uint8_t data)
-{
-  uint8_t b[2] = {id, data};
-  return can_send(dip, sizeof(b), b);
-}
-
-// send a three byte can message
 int8_t can_send_u16(uint8_t dip, uint8_t id, uint16_t data)
 {
-  uint8_t b[3] = {id};
-  b[1] = (data >> 8) & 0xff;
-  b[2] = data & 0xff;
-  return can_send(dip, sizeof(b), b);
+  uint8_t b[2] = {
+      (data >> 8) & 0xff,
+      data & 0xff};
+  return can_send(dip, id, 2, b);
 }
 
-// send a five byte can message
+// send a four byte can message
 int8_t can_send_u32(uint8_t dip, uint8_t id, uint32_t data)
 {
-  uint8_t b[5] = {id};
-  b[1] = (data >> 24) & 0xff;
-  b[2] = (data >> 16) & 0xff;
-  b[3] = (data >> 8) & 0xff;
-  b[4] = data & 0xff;
-  return can_send(dip, sizeof(b), b);
+  uint8_t b[4] = {
+      (data >> 24) & 0xff,
+      (data >> 16) & 0xff,
+      (data >> 8) & 0xff,
+      data & 0xff};
+  return can_send(dip, id, 4, b);
 }
 
 // send an eight byte can message
-// NOTE: top byte is essentially masked from u64 data (ie, not included)
 int8_t can_send_u64(uint8_t dip, uint8_t id, uint64_t data)
 {
-  uint8_t b[8] = {id};
-  b[1] = (data >> 48) & 0xff;
-  b[2] = (data >> 40) & 0xff;
-  b[3] = (data >> 32) & 0xff;
-  b[4] = (data >> 24) & 0xff;
-  b[5] = (data >> 16) & 0xff;
-  b[6] = (data >> 8) & 0xff;
-  b[7] = data & 0xff;
-  return can_send(dip, sizeof(b), b);
+  uint8_t b[8] = {
+      (data >> 48) & 0xff,
+      (data >> 40) & 0xff,
+      (data >> 32) & 0xff,
+      (data >> 24) & 0xff,
+      (data >> 16) & 0xff,
+      (data >> 8) & 0xff,
+      data & 0xff};
+  return can_send(dip, id, 8, b);
 }
 
 // returns the timer number from the pointer based on the instance
@@ -536,10 +536,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     // byte 0 = dip
     // byte 1 = enable
     // byte 2 = mode
-    if (header.DLC != 3)
-    {
-      return;
-    }
+    // byte 3 = broadcast enable
     uint8_t dip = read_dip();
     if (data[0] != dip)
     {
@@ -548,15 +545,12 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     }
     shuffling_enabled = data[1];
     shuffling_mode = data[2];
+    can_broadcast_enabled = data[3];
 
     break;
 
   case CAN_ID_CONFIG2:
     // byte 0 = enable
-    if (header.DLC != 1)
-    {
-      return;
-    }
     shuffling_enabled = data[0];
     break;
 
@@ -702,15 +696,15 @@ int main(void)
       can_last_update = HAL_GetTick();
 
       // send shuffling status
-      can_send_u16(dip, 0x0, (shuffling_enabled << 8) | (shuffling_mode & 0xff));
+      can_send_u16(dip, 0x00, (shuffling_enabled << 8) | (shuffling_mode & 0xff));
 
       // send mcu temp and adc vref
-      can_send_u32(dip, 0x1, (temp << 16) | (vrefa & 0xffff));
+      can_send_u32(dip, 0x01, (temp << 16) | (vrefa & 0xffff));
 
       // send all read string voltages, assume string voltages aren't greater than 16 bit
       // ie, no voltage over 2^16=65535mV or 65.5V
-      can_send_u32(dip, 0x2, (VCC2_1 << 16) | (VCC3_2 & 0xffff));
-      can_send_u32(dip, 0x3, (VCC4_3 << 16) | (VCC5_4 & 0xffff));
+      can_send_u32(dip, 0x02, (VCC2_1 << 16) | (VCC3_2 & 0xffff));
+      can_send_u32(dip, 0x03, (VCC4_3 << 16) | (VCC5_4 & 0xffff));
 
       // and converted shuffle duty cycles + directions
       // inlcude both the sign for direction and duty cycle
@@ -718,11 +712,11 @@ int main(void)
       {
         union FloatConv dc;
         dc.f = shuffle_converter1.duty_cycle.f * (shuffle_converter1.direction.f == 0 ? 1 : shuffle_converter1.direction.f);
-        can_send_u32(dip, 0x4, dc.i);
+        can_send_u32(dip, 0x04, dc.i);
         dc.f = shuffle_converter2.duty_cycle.f * (shuffle_converter2.direction.f == 0 ? 1 : shuffle_converter2.direction.f);
-        can_send_u32(dip, 0x5, dc.i);
+        can_send_u32(dip, 0x05, dc.i);
         dc.f = shuffle_converter3.duty_cycle.f * (shuffle_converter3.direction.f == 0 ? 1 : shuffle_converter3.direction.f);
-        can_send_u32(dip, 0x6, dc.i);
+        can_send_u32(dip, 0x06, dc.i);
       }
 
       HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
@@ -816,7 +810,7 @@ void Error_Handler(const char *format, ...)
   disable_timer(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, DIS3_GPIO_Port, DIS3_Pin);
 
   // send error to can bus
-  can_send_byte(CAN_ID_ERROR + read_dip(), 0);
+  can_send_u8(read_dip(), 0xF, 0);
 
   /*
   va_list args;
