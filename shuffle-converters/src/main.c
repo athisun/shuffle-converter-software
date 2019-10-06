@@ -543,7 +543,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
       return;
     }
     shuffling_enabled = data[1];
-    shuffling_mode = data[2];
+    // shuffling_mode = data[2]; // TODO: allow setting mode when another mode works
     can_broadcast_enabled = data[3];
   }
   else if (header.StdId == CAN_ID_CONFIG2)
@@ -552,7 +552,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
     // byte 1 = mode
     // byte 2 = broadcast enable
     shuffling_enabled = data[0];
-    shuffling_mode = data[1];
+    // shuffling_mode = data[1]; // TODO: allow setting mode when another mode works
     can_broadcast_enabled = data[2];
   }
   else
