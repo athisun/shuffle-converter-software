@@ -549,7 +549,11 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   else if (header.StdId == CAN_ID_CONFIG2)
   {
     // byte 0 = enable
+    // byte 1 = mode
+    // byte 2 = broadcast enable
     shuffling_enabled = data[0];
+    shuffling_mode = data[1];
+    can_broadcast_enabled = data[2];
   }
   else
   {
