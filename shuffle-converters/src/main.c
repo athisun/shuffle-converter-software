@@ -528,8 +528,6 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   uint8_t data[8] = {};
   HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &header, data);
 
-  uint8_t old_enabled = shuffling_enabled;
-
   if (header.StdId == CAN_ID_CONFIG1)
   {
     // byte 0 = dip
@@ -559,14 +557,6 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   {
     // just ignore it
     return;
-  }
-
-  if (old_enabled == 1 && shuffling_enabled == 0)
-  {
-    // if the shuffling has been disabled, specifically turn things off
-    disable_timer(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2, DIS1_GPIO_Port, DIS1_Pin);
-    disable_timer(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2, DIS2_GPIO_Port, DIS2_Pin);
-    disable_timer(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, DIS3_GPIO_Port, DIS3_Pin);
   }
 }
 
@@ -729,11 +719,18 @@ int main(void)
         dc.f = shuffle_converter3.duty_cycle.f * (shuffle_converter3.direction.f == 0 ? 1 : shuffle_converter3.direction.f);
         can_send_u32(dip, 0x06, dc.i);
 
+        // toggle led
         HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
       }
       else
       {
+        // disble led when not shuffling
         HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+
+        // if the shuffling has been disabled, explicitly turn things off
+        disable_timer(&htim1, TIM_CHANNEL_1, TIM_CHANNEL_2, DIS1_GPIO_Port, DIS1_Pin);
+        disable_timer(&htim2, TIM_CHANNEL_1, TIM_CHANNEL_2, DIS2_GPIO_Port, DIS2_Pin);
+        disable_timer(&htim15, TIM_CHANNEL_1, TIM_CHANNEL_2, DIS3_GPIO_Port, DIS3_Pin);
       }
     }
 
