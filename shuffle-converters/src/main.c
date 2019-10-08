@@ -728,9 +728,13 @@ int main(void)
         can_send_u32(dip, 0x05, dc.i);
         dc.f = shuffle_converter3.duty_cycle.f * (shuffle_converter3.direction.f == 0 ? 1 : shuffle_converter3.direction.f);
         can_send_u32(dip, 0x06, dc.i);
-      }
 
-      HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+        HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+      }
+      else
+      {
+        HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+      }
     }
 
     // only shuffle if enabled by config
