@@ -632,17 +632,26 @@ int main(void)
   // http://www.cse.dmu.ac.uk/~eg/tele/CanbusIDandMask.html
   CAN_FilterTypeDef sFilterConfig = {};
   sFilterConfig.FilterBank = 0;
-  sFilterConfig.FilterMode = CAN_FILTERMODE_IDLIST;
-  sFilterConfig.FilterScale = CAN_FILTERSCALE_16BIT;
-  sFilterConfig.FilterIdHigh = CAN_ID_CONFIG1;
-  sFilterConfig.FilterIdLow = CAN_ID_CONFIG2;
-  sFilterConfig.FilterMaskIdHigh = 0xFFFFFFFF;
-  sFilterConfig.FilterMaskIdLow = 0xFFFFFFFF;
-  sFilterConfig.FilterFIFOAssignment = 0;
+  sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK;
+  sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
+  sFilterConfig.FilterIdHigh = CAN_ID_CONFIG1 << 5;
+  sFilterConfig.FilterIdLow = 0x0000;
+  sFilterConfig.FilterMaskIdHigh = CAN_ID_CONFIG1 << 5;
+  sFilterConfig.FilterMaskIdLow = 0x0000;
+  sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
   sFilterConfig.FilterActivation = ENABLE;
+  sFilterConfig.SlaveStartFilterBank = 14;
   if (HAL_CAN_ConfigFilter(&hcan1, &sFilterConfig) != HAL_OK)
   {
-    Error_Handler("error setting can filter");
+    Error_Handler("error setting can filter 1");
+  }
+
+  sFilterConfig.FilterBank = 1;
+  sFilterConfig.FilterIdHigh = CAN_ID_CONFIG2 << 5;
+  sFilterConfig.FilterMaskIdHigh = CAN_ID_CONFIG2 << 5;
+  if (HAL_CAN_ConfigFilter(&hcan1, &sFilterConfig) != HAL_OK)
+  {
+    Error_Handler("error setting can filter 2");
   }
 
   // start can
